@@ -1,0 +1,1209 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>מעקב משמרות | שכיר ישראלי</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/preact@10/dist/preact.umd.js"></script>
+  <script src="https://unpkg.com/preact@10/hooks/dist/hooks.umd.js"></script>
+  <script src="https://unpkg.com/htm/dist/htm.umd.js"></script>
+  <!-- Google Identity Services -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <!-- PWA: iOS meta tags -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="משמרות">
+  <meta name="theme-color" content="#3b82f6">
+  <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%233b82f6'/%3E%3Ctext y='.85em' font-size='72' x='10'%3E%F0%9F%92%BC%3C/text%3E%3C/svg%3E">
+  <script>
+  // PWA manifest (blob works in Chrome/Edge on HTTPS)
+  (function(){
+    try {
+      const m={name:'מעקב משמרות',short_name:'משמרות',start_url:'./',
+        display:'standalone',background_color:'#f8fafc',theme_color:'#3b82f6',lang:'he',dir:'rtl',
+        icons:[{src:"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%233b82f6'/%3E%3Ctext y='.85em' font-size='72' x='10'%3E%F0%9F%92%BC%3C/text%3E%3C/svg%3E",
+          sizes:'512x512',type:'image/svg+xml',purpose:'any maskable'}]};
+      const l=document.createElement('link');l.rel='manifest';
+      l.href=URL.createObjectURL(new Blob([JSON.stringify(m)],{type:'application/manifest+json'}));
+      document.head.appendChild(l);
+    } catch(e){}
+    // Service Worker (HTTPS only)
+    if('serviceWorker' in navigator && location.protocol!=='file:') {
+      const sw=`const C='sw-v1';
+self.addEventListener('install',()=>self.skipWaiting());
+self.addEventListener('activate',e=>e.waitUntil(clients.claim()));
+self.addEventListener('fetch',e=>{
+  if(e.request.method!=='GET')return;
+  e.respondWith(caches.open(C).then(c=>c.match(e.request).then(h=>h||fetch(e.request).then(r=>{
+    if(r.ok&&r.type!=='opaque')c.put(e.request,r.clone());return r;
+  }))));
+});`;
+      navigator.serviceWorker.register(
+        URL.createObjectURL(new Blob([sw],{type:'text/javascript'}))
+      ).catch(()=>{});
+    }
+  })();
+  </script>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; }
+    .fade { animation: fi .18s ease; }
+    @keyframes fi { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:none; } }
+    ::-webkit-scrollbar { width:5px; }
+    ::-webkit-scrollbar-thumb { background:#cbd5e1; border-radius:3px; }
+    input[type=number]::-webkit-inner-spin-button,
+    input[type=number]::-webkit-outer-spin-button { -webkit-appearance:none; margin:0; }
+    input[type=number] { -moz-appearance:textfield; }
+    /* Drag-select highlight */
+    .cal-drag { background-color:#dbeafe !important; border-color:#93c5fd !important; }
+    /* Dark mode overrides */
+    .dark body { background-color:#0f172a !important; }
+    .dark .bg-white  { background-color:#1e293b !important; }
+    .dark .bg-slate-50 { background-color:#0f172a !important; }
+    .dark .bg-gray-50\/40 { background-color:rgba(15,23,42,.5) !important; }
+    .dark .border-gray-100 { border-color:#334155 !important; }
+    .dark .border-gray-200 { border-color:#475569 !important; }
+    .dark .text-gray-800 { color:#f1f5f9 !important; }
+    .dark .text-gray-700 { color:#e2e8f0 !important; }
+    .dark .text-gray-600 { color:#cbd5e1 !important; }
+    .dark .text-gray-500 { color:#94a3b8 !important; }
+    .dark .text-gray-400 { color:#64748b !important; }
+    .dark .bg-gray-100  { background-color:#334155 !important; }
+    .dark .hover\:bg-gray-100:hover { background-color:#334155 !important; }
+    .dark .hover\:bg-gray-50:hover  { background-color:#1e293b !important; }
+    .dark .hover\:bg-gray-200:hover { background-color:#475569 !important; }
+    .dark input:not([type=checkbox]), .dark select, .dark textarea {
+      background-color:#334155 !important; color:#f1f5f9 !important; border-color:#475569 !important;
+    }
+    .dark .shadow-sm   { box-shadow:0 1px 3px rgba(0,0,0,.5) !important; }
+    .dark .shadow-2xl  { box-shadow:0 25px 50px rgba(0,0,0,.7) !important; }
+    .dark .bg-blue-50  { background-color:rgba(59,130,246,.15) !important; }
+    .dark .border-blue-100 { border-color:rgba(59,130,246,.3) !important; }
+    .dark .bg-amber-50 { background-color:rgba(245,158,11,.12) !important; }
+    .dark .border-amber-100 { border-color:rgba(245,158,11,.3) !important; }
+    .dark .bg-red-50   { background-color:rgba(239,68,68,.12) !important; }
+    .dark .border-red-100 { border-color:rgba(239,68,68,.3) !important; }
+    .dark .bg-emerald-50 { background-color:rgba(16,185,129,.12) !important; }
+    .dark .cal-drag    { background-color:#1e3a5f !important; border-color:#3b82f6 !important; }
+    .dark .bg-gradient-to-l { background-image:linear-gradient(to left,rgba(109,40,217,.25),rgba(37,99,235,.25)) !important; }
+    /* Colored text — light versions for dark bg */
+    .dark .text-blue-700   { color:#93c5fd !important; }
+    .dark .text-blue-600   { color:#60a5fa !important; }
+    .dark .text-emerald-700{ color:#6ee7b7 !important; }
+    .dark .text-emerald-600{ color:#34d399 !important; }
+    .dark .text-violet-700 { color:#c4b5fd !important; }
+    .dark .text-purple-700 { color:#c4b5fd !important; }
+    .dark .text-amber-700  { color:#fcd34d !important; }
+    .dark .text-orange-700 { color:#fdba74 !important; }
+    .dark .text-red-600    { color:#fca5a5 !important; }
+    .dark .text-red-500    { color:#f87171 !important; }
+    /* Colored backgrounds for stat cards & badges */
+    .dark .bg-violet-50    { background-color:rgba(139,92,246,.15) !important; }
+    .dark .bg-orange-50    { background-color:rgba(249,115,22,.12) !important; }
+    .dark .bg-purple-100   { background-color:rgba(139,92,246,.25) !important; }
+    .dark .bg-emerald-100  { background-color:rgba(16,185,129,.25) !important; }
+    .dark .bg-amber-100    { background-color:rgba(245,158,11,.25) !important; }
+    /* Colored borders for stat cards */
+    .dark .border-emerald-100 { border-color:rgba(16,185,129,.3) !important; }
+    .dark .border-violet-100  { border-color:rgba(139,92,246,.3) !important; }
+    .dark .border-orange-100  { border-color:rgba(249,115,22,.3) !important; }
+    /* Hover states on colored panels */
+    .dark .hover\:bg-blue-50:hover    { background-color:rgba(59,130,246,.2) !important; }
+    .dark .hover\:bg-blue-100:hover   { background-color:rgba(59,130,246,.25) !important; }
+    .dark .hover\:bg-red-50:hover     { background-color:rgba(239,68,68,.15) !important; }
+    .dark .hover\:bg-red-100:hover    { background-color:rgba(239,68,68,.2) !important; }
+    .dark .hover\:bg-emerald-100:hover{ background-color:rgba(16,185,129,.25) !important; }
+    /* Input placeholder */
+    .dark ::placeholder { color:#64748b !important; }
+    .dark ::-webkit-scrollbar-thumb { background:#475569; }
+    /* Toggle switch animation */
+    .toggle-thumb { transition: transform .2s; }
+  </style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+<div id="root"></div>
+<script>
+const { h, render } = preact;
+const { useState, useEffect, useMemo, useCallback, useRef } = preactHooks;
+const html = htm.bind(h);
+
+// ── Constants ────────────────────────────────────────────────
+const MONTHS = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
+const DAYS   = ['א׳','ב׳','ג׳','ד׳','ה׳','ו׳','ש׳'];
+const COLORS = ['#3B82F6','#10B981','#8B5CF6','#EF4444','#F97316','#EC4899','#14B8A6','#6366F1','#F59E0B','#84CC16','#06B6D4','#F43F5E'];
+
+// ── Helpers ──────────────────────────────────────────────────
+const genId   = () => Date.now().toString(36) + Math.random().toString(36).slice(2,5);
+const todayS  = () => new Date().toISOString().slice(0,10);
+const fmt     = n  => '₪' + Math.round(n).toLocaleString('he-IL');
+const mDays     = (y,m) => new Date(y,m+1,0).getDate();
+function dateRange(a,b) {
+  const s=a<b?a:b, e=a<b?b:a, out=[];
+  const cur=new Date(s+'T12:00:00'), end=new Date(e+'T12:00:00');
+  while(cur<=end){ out.push(cur.toISOString().slice(0,10)); cur.setDate(cur.getDate()+1); }
+  return out;
+}
+
+// Module-level Google token (survives tab switches, clears on page reload)
+let _gToken = null;
+
+// ── Tax (Israel 2025 estimate) ───────────────────────────────
+const BRACKETS  = [{l:7380,r:.10},{l:10620,r:.14},{l:17040,r:.20},{l:22440,r:.31},{l:46640,r:.35},{l:60130,r:.47},{l:1e9,r:.50}];
+const CVAL=242, NI_FL=7522, NI_CL=47465;
+
+function calcTax(g, pts) {
+  let tax=0, prev=0;
+  for (const {l,r} of BRACKETS) {
+    if (g<=prev) break;
+    tax += (Math.min(g,l)-prev)*r; prev=l;
+  }
+  return Math.max(0, tax - pts*CVAL);
+}
+function calcNI(g) {
+  const c=Math.min(g,NI_CL);
+  if (c<=NI_FL) return {ni:c*.004, he:c*.031};
+  return {ni:NI_FL*.004+(c-NI_FL)*.07, he:NI_FL*.031+(c-NI_FL)*.05};
+}
+function calcAll(g,pts) {
+  if (!g||g<=0) return {gross:0,incomeTax:0,ni:0,health:0,pension:0,total:0,net:0};
+  pts = pts||2.25;
+  const incomeTax=calcTax(g,pts), {ni,he:health}=calcNI(g), pension=g*.06;
+  const total=incomeTax+ni+health+pension;
+  return {gross:g,incomeTax,ni,health,pension,total,net:Math.max(0,g-total)};
+}
+
+// ── useLS hook ───────────────────────────────────────────────
+function useLS(key, def) {
+  const [v,setV] = useState(() => {
+    try { const s=localStorage.getItem(key); return s ? JSON.parse(s) : def; }
+    catch(e) { return def; }
+  });
+  const set = useCallback(next => {
+    setV(prev => {
+      const val = typeof next==='function' ? next(prev) : next;
+      try { localStorage.setItem(key,JSON.stringify(val)); } catch(e) {}
+      return val;
+    });
+  },[key]);
+  return [v,set];
+}
+
+// ── findJob helper ───────────────────────────────────────────
+function findJob(jobs, id) { return jobs.find(j=>j.id===id)||null; }
+
+// ── Modal ────────────────────────────────────────────────────
+function Modal({title, onClose, children}) {
+  useEffect(()=>{
+    const h = e => { if(e.key==='Escape') onClose(); };
+    window.addEventListener('keydown',h);
+    return ()=>window.removeEventListener('keydown',h);
+  },[onClose]);
+  return html`
+    <div class="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-3"
+      onClick=${e=>e.target===e.currentTarget&&onClose()}>
+      <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[92vh] overflow-y-auto fade">
+        <div class="flex items-center justify-between px-5 py-4 border-b border-gray-100 sticky top-0 bg-white rounded-t-2xl">
+          <h2 class="font-bold text-gray-800">${title}</h2>
+          <button onClick=${onClose} class="w-7 h-7 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-500 text-xl">×</button>
+        </div>
+        <div class="p-5">${children}</div>
+      </div>
+    </div>`;
+}
+
+// ── ColorPicker ──────────────────────────────────────────────
+function ColorPicker({value, onChange}) {
+  return html`<div class="flex flex-wrap gap-2">
+    ${COLORS.map(c=>html`
+      <button key=${c} onClick=${()=>onChange(c)}
+        class=${'w-8 h-8 rounded-full transition-all '+(value===c?'ring-2 ring-offset-2 ring-gray-700 scale-110':'hover:scale-105')}
+        style=${{backgroundColor:c}}/>`)}
+  </div>`;
+}
+
+// ── MonthNav ─────────────────────────────────────────────────
+function MonthNav({year,month,onChange}) {
+  const go = d => { let m=month+d,y=year; if(m<0){m=11;y--;} if(m>11){m=0;y++;} onChange(y,m); };
+  const now=new Date(), isCur=year===now.getFullYear()&&month===now.getMonth();
+  return html`<div class="flex items-center gap-2">
+    <button onClick=${()=>go(-1)} class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-600 text-lg">←</button>
+    <span class="font-semibold text-gray-700 min-w-[7rem] text-center text-sm">${MONTHS[month]} ${year}</span>
+    <button onClick=${()=>go(1)}  class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-600 text-lg">→</button>
+    <button onClick=${()=>!isCur&&onChange(now.getFullYear(),now.getMonth())}
+      class=${'text-xs border rounded px-1.5 py-0.5 w-[2.75rem] text-center transition-opacity '+(isCur?'opacity-0 pointer-events-none border-transparent':'text-blue-600 border-blue-200 hover:bg-blue-50')}>
+      היום</button>
+  </div>`;
+}
+
+// ── StatCard ─────────────────────────────────────────────────
+function StatCard({label,value,sub,color,icon}) {
+  const cls={blue:'bg-blue-50 text-blue-700 border-blue-100',green:'bg-emerald-50 text-emerald-700 border-emerald-100',
+    purple:'bg-violet-50 text-violet-700 border-violet-100',orange:'bg-orange-50 text-orange-700 border-orange-100'};
+  return html`<div class=${'rounded-xl border p-4 '+(cls[color]||cls.blue)}>
+    <div class="flex justify-between items-start mb-1">
+      <span class="text-xs font-medium opacity-70">${label}</span>
+      ${icon&&html`<span class="text-base">${icon}</span>`}
+    </div>
+    <div class="text-xl font-bold">${value}</div>
+    ${sub&&html`<div class="text-xs mt-0.5 opacity-60">${sub}</div>`}
+  </div>`;
+}
+
+// ── JobForm ──────────────────────────────────────────────────
+function JobForm({initial, onSave, onClose}) {
+  const [name,  setName]  = useState((initial&&initial.name)||'');
+  const [color, setColor] = useState((initial&&initial.color)||COLORS[0]);
+  const [type,  setType]  = useState((initial&&initial.rateType)||'daily');
+  const [rate,  setRate]  = useState((initial&&initial.rate!=null)?String(initial.rate):'');
+
+  const submit = () => {
+    if (!name.trim()) return alert('יש למלא שם משרה');
+    if (!rate||+rate<=0) return alert('יש להזין תעריף תקין');
+    onSave({name:name.trim(),color,rateType:type,rate:+rate});
+  };
+  return html`<div class="space-y-4">
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-1">שם המשרה</label>
+      <input value=${name} onInput=${e=>setName(e.target.value)} placeholder="לדוגמה: חברת אלפא"
+        class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
+    </div>
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-2">צבע</label>
+      <${ColorPicker} value=${color} onChange=${setColor}/>
+    </div>
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-1">סוג תעריף</label>
+      <div class="flex gap-2">
+        ${[['daily','יומי'],['hourly','שעתי'],['monthly','חודשי']].map(([v,l])=>html`
+          <button key=${v} onClick=${()=>setType(v)}
+            class=${'flex-1 py-2 rounded-lg text-sm font-medium transition-colors '+(type===v?'bg-blue-500 text-white':'bg-gray-100 text-gray-600 hover:bg-gray-200')}>
+            ${l}</button>`)}
+      </div>
+    </div>
+    ${type==='monthly'&&html`<div class="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg p-2">
+      💡 משרה חודשית: השכר החודשי יחושב פעם אחת בחודש, ללא תלות במספר המשמרות.
+    </div>`}
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-1">${type==='daily'?'שכר יומי (₪)':type==='hourly'?'שכר שעתי (₪)':'שכר חודשי (₪)'}</label>
+      <input type="number" value=${rate} onInput=${e=>setRate(e.target.value)} placeholder="0"
+        class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
+    </div>
+    <div class="flex gap-2 pt-1">
+      <button onClick=${submit} class="flex-1 bg-blue-500 text-white py-2 rounded-lg text-sm font-semibold hover:bg-blue-600 transition-colors">שמור</button>
+      <button onClick=${onClose} class="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg text-sm font-semibold hover:bg-gray-200 transition-colors">ביטול</button>
+    </div>
+  </div>`;
+}
+
+// ── ShiftForm ────────────────────────────────────────────────
+function ShiftForm({initial, jobs, shifts, onSave, onClose, onDelete}) {
+  const [jobId,  setJobId]  = useState((initial&&initial.jobId)||(jobs[0]&&jobs[0].id)||'');
+  const [date,   setDate]   = useState((initial&&initial.date)||todayS());
+  const [hours,  setHours]  = useState(initial&&initial.hours!=null?initial.hours:8);
+  const [travel, setTravel] = useState(initial&&initial.travel!=null?initial.travel:0);
+  const [bonus,  setBonus]  = useState(initial&&initial.bonus!=null?initial.bonus:0);
+  const [isPaid, setIsPaid] = useState(initial&&initial.isPaid!=null?initial.isPaid:false);
+  const [notes,  setNotes]  = useState((initial&&initial.notes)||'');
+
+  const job        = findJob(jobs,jobId);
+  const isMonthly  = job && job.rateType==='monthly';
+  const baseEarn   = isMonthly ? 0 : (job?(job.rateType==='daily'?job.rate:job.rate*(+hours||0)):0);
+  const total      = baseEarn+(+travel||0)+(+bonus||0);
+
+  // One shift per day: exclude the shift being edited
+  const editingId  = initial && initial.id;
+  const dateConflict = date && (shifts||[]).some(s=>s.date===date && s.id!==editingId);
+
+  const submit = () => {
+    if (!jobId) return alert('יש לבחור משרה');
+    if (!date)  return alert('יש לבחור תאריך');
+    if (dateConflict) return alert('כבר קיימת משמרת בתאריך זה.\nניתן להוסיף משמרת אחת ביום בלבד.');
+    onSave({jobId,date,hours:+hours||0,travel:+travel||0,bonus:+bonus||0,isPaid,notes,earnings:baseEarn});
+  };
+
+  if (!jobs.length) return html`<div class="text-center py-8 text-gray-400">
+    <div class="text-4xl mb-2">💼</div>
+    <p>אין משרות. הוסף משרה קודם בלשונית "משרות".</p>
+    <button onClick=${onClose} class="mt-4 text-blue-500 underline text-sm">סגור</button>
+  </div>`;
+
+  return html`<div class="space-y-4">
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-1">משרה</label>
+      <select value=${jobId} onChange=${e=>setJobId(e.target.value)}
+        class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
+        ${jobs.map(j=>html`<option key=${j.id} value=${j.id}>${j.name}</option>`)}
+      </select>
+    </div>
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-1">תאריך</label>
+      <input type="date" value=${date} onChange=${e=>setDate(e.target.value)}
+        class=${'w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 '+(dateConflict?'border-red-300 focus:ring-red-300':'border-gray-200 focus:ring-blue-300')}/>
+      ${dateConflict&&html`<p class="text-xs text-red-500 mt-1">⚠️ כבר קיימת משמרת בתאריך זה</p>`}
+    </div>
+    ${isMonthly?html`
+      <div class="bg-blue-50 border border-blue-100 rounded-lg p-3 text-sm text-blue-700">
+        💼 משרה חודשית — שכר חודשי: <strong>${fmt(job.rate)}</strong> (מחושב אוטומטית פעם בחודש)
+      </div>`:html`
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">
+          שעות עבודה ${job&&job.rateType==='daily'?html`<span class="text-gray-400 font-normal text-xs">(לתיעוד בלבד)</span>`:''}
+        </label>
+        <input type="number" step="0.5" min="0" value=${hours} onInput=${e=>setHours(e.target.value)}
+          class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
+      </div>`}
+    <div class="grid grid-cols-2 gap-3">
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">נסיעות (₪)</label>
+        <input type="number" value=${travel} onInput=${e=>setTravel(e.target.value)} placeholder="0"
+          class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">בונוס (₪)</label>
+        <input type="number" value=${bonus} onInput=${e=>setBonus(e.target.value)} placeholder="0"
+          class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
+      </div>
+    </div>
+    ${job&&html`<div class="bg-slate-50 rounded-lg px-3 py-2 text-sm">
+      <span class="text-gray-500">סה"כ משמרת: </span>
+      <span class="font-bold text-emerald-600 text-base">${fmt(total)}</span>
+      ${!isMonthly&&html`<span class="text-gray-400 text-xs"> (${job.rateType==='daily'?fmt(job.rate)+' יומי':fmt(job.rate)+'/שעה × '+hours})</span>`}
+    </div>`}
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-1">הערות</label>
+      <textarea rows="2" value=${notes} onInput=${e=>setNotes(e.target.value)} placeholder="אופציונלי..."
+        class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 resize-none"></textarea>
+    </div>
+    <label class="flex items-center gap-2 cursor-pointer">
+      <input type="checkbox" checked=${isPaid} onChange=${e=>setIsPaid(e.target.checked)} class="w-4 h-4 rounded"/>
+      <span class="text-sm text-gray-700">משמרת זו שולמה ✓</span>
+    </label>
+    <div class="flex gap-2 pt-1">
+      <button onClick=${submit} class="flex-1 bg-blue-500 text-white py-2 rounded-lg text-sm font-semibold hover:bg-blue-600 transition-colors">שמור</button>
+      <button onClick=${onClose} class="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg text-sm font-semibold hover:bg-gray-200 transition-colors">ביטול</button>
+    </div>
+    ${onDelete&&html`
+      <button onClick=${onDelete}
+        class="w-full border border-red-200 text-red-500 py-2 rounded-lg text-sm font-medium hover:bg-red-50 transition-colors mt-1">
+        🗑️ מחק משמרת זו
+      </button>`}
+  </div>`;
+}
+
+// ── CalendarView ─────────────────────────────────────────────
+function CalendarView({year,month,shifts,jobs,onDayClick,onShiftClick,onRangeSelect}) {
+  const days=mDays(year,month), first=new Date(year,month,1).getDay(), today=todayS();
+  const [dragStart,setDragStart]=useState(null);
+  const [dragEnd,  setDragEnd]  =useState(null);
+  const dragRef=useRef({active:false,start:null,end:null});
+
+  useEffect(()=>{
+    const up=()=>{
+      if(!dragRef.current.active) return;
+      const {start,end}=dragRef.current;
+      dragRef.current={active:false,start:null,end:null};
+      setDragStart(null); setDragEnd(null);
+      if(start&&end&&start!==end) { onRangeSelect&&onRangeSelect(start,end); }
+      else if(start) { onDayClick(start); }
+    };
+    window.addEventListener('mouseup',up);
+    return ()=>window.removeEventListener('mouseup',up);
+  },[onDayClick,onRangeSelect]);
+
+  const selSet=useMemo(()=>{
+    if(!dragStart||!dragEnd) return new Set();
+    return new Set(dateRange(dragStart,dragEnd));
+  },[dragStart,dragEnd]);
+
+  const byDay={};
+  shifts.forEach(s=>{ const d=+s.date.slice(8); (byDay[d]=byDay[d]||[]).push(s); });
+  const cells=[...Array(first).fill(null),...Array.from({length:days},(_,i)=>i+1)];
+
+  return html`<div>
+    <div class="grid grid-cols-7 gap-0.5 mb-1">
+      ${DAYS.map(d=>html`<div key=${d} class="text-center text-xs font-medium text-gray-400 py-1">${d}</div>`)}
+    </div>
+    <div class="grid grid-cols-7 gap-0.5">
+      ${cells.map((day,i)=>{
+        if(!day) return html`<div key=${'e'+i}/>`;
+        const ds=`${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+        const ds2=byDay[day]||[], isT=ds===today, isPast=ds<today, inDrag=selSet.has(ds);
+        const cls='min-h-[4rem] rounded-lg p-1 cursor-pointer border transition-colors select-none '+
+          (inDrag?'cal-drag ':isT?'border-blue-400 bg-blue-50 ':
+           'border-transparent hover:border-gray-200 hover:bg-gray-50 ')+
+          (isPast&&!isT&&!inDrag?'bg-gray-50/40':'');
+        return html`<div key=${day} class=${cls}
+          onMouseDown=${e=>{
+            e.preventDefault();
+            dragRef.current={active:true,start:ds,end:ds};
+            setDragStart(ds); setDragEnd(ds);
+          }}
+          onMouseEnter=${()=>{
+            if(!dragRef.current.active) return;
+            dragRef.current.end=ds;
+            setDragEnd(ds);
+          }}>
+          <div class=${'text-xs font-semibold mb-0.5 '+(isT?'text-blue-600':'text-gray-500')}>${day}</div>
+          ${ds2.slice(0,2).map(s=>{ const j=findJob(jobs,s.jobId); return html`
+            <div key=${s.id} onClick=${e=>{e.stopPropagation();onShiftClick(s);}}
+              class="text-[10px] px-1 py-0.5 rounded text-white truncate mb-0.5 hover:opacity-80"
+              style=${{backgroundColor:(j&&j.color)||'#9CA3AF'}}>${(j&&j.name)||'?'}</div>`;})}
+          ${ds2.length>2&&html`<div class="text-[10px] text-gray-400">+${ds2.length-2}</div>`}
+        </div>`;
+      })}
+    </div>
+    ${selSet.size>0&&html`<div class="mt-2 text-xs text-blue-600 text-center">גוררים — ${selSet.size} ימים נבחרו</div>`}
+  </div>`;
+}
+
+// ── BulkShiftForm ────────────────────────────────────────────
+function BulkShiftForm({startDate,endDate,jobs,shifts,onSave,onClose}) {
+  const [jobId,     setJobId]     = useState((jobs[0]&&jobs[0].id)||'');
+  const [sDate,     setSDate]     = useState(startDate||todayS());
+  const [eDate,     setEDate]     = useState(endDate||todayS());
+  const [hours,     setHours]     = useState(8);
+  const [travel,    setTravel]    = useState(0);
+  const [skipExist, setSkipExist] = useState(true);
+
+  const job      = findJob(jobs,jobId);
+  const isMonthly= job&&job.rateType==='monthly';
+  const range    = useMemo(()=>sDate&&eDate?dateRange(sDate,eDate):[], [sDate,eDate]);
+  const existSet = useMemo(()=>new Set((shifts||[]).map(s=>s.date)), [shifts]);
+  const toAdd    = range.filter(d=>!skipExist||!existSet.has(d));
+
+  const submit=()=>{
+    if(!jobId) return alert('יש לבחור משרה');
+    if(!sDate||!eDate) return alert('יש לבחור טווח תאריכים');
+    if(toAdd.length===0) return alert('אין תאריכים חדשים להוסיף בטווח זה');
+    const newShifts=toAdd.map(d=>{
+      const earn=isMonthly?0:(job?(job.rateType==='daily'?job.rate:job.rate*(+hours||0)):0);
+      return {id:genId(),jobId,date:d,hours:+hours||0,travel:+travel||0,bonus:0,isPaid:false,notes:'',earnings:earn};
+    });
+    onSave(newShifts); onClose();
+  };
+
+  return html`<div class="space-y-4">
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-1">משרה</label>
+      <select value=${jobId} onChange=${e=>setJobId(e.target.value)}
+        class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
+        ${jobs.map(j=>html`<option key=${j.id} value=${j.id}>${j.name}</option>`)}
+      </select>
+    </div>
+    <div class="grid grid-cols-2 gap-3">
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">מתאריך</label>
+        <input type="date" value=${sDate} onChange=${e=>setSDate(e.target.value)}
+          class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">עד תאריך</label>
+        <input type="date" value=${eDate} onChange=${e=>setEDate(e.target.value)}
+          class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
+      </div>
+    </div>
+    ${!isMonthly&&html`
+    <div class="grid grid-cols-2 gap-3">
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">שעות יומיות</label>
+        <input type="number" step="0.5" min="0" value=${hours} onInput=${e=>setHours(e.target.value)}
+          class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">נסיעות יומי (₪)</label>
+        <input type="number" value=${travel} onInput=${e=>setTravel(e.target.value)} placeholder="0"
+          class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
+      </div>
+    </div>`}
+    <label class="flex items-center gap-2 cursor-pointer select-none">
+      <input type="checkbox" checked=${skipExist} onChange=${e=>setSkipExist(e.target.checked)} class="w-4 h-4 rounded"/>
+      <span class="text-sm text-gray-700">דלג על תאריכים שכבר יש בהם משמרת</span>
+    </label>
+    <div class="bg-blue-50 border border-blue-100 rounded-lg p-3 text-sm text-blue-700">
+      <strong>${toAdd.length}</strong> משמרות יתווספו מתוך <strong>${range.length}</strong> ימים בטווח
+    </div>
+    <div class="flex gap-2 pt-1">
+      <button onClick=${submit}
+        class="flex-1 bg-blue-500 text-white py-2 rounded-lg text-sm font-semibold hover:bg-blue-600 transition-colors">
+        הוסף ${toAdd.length} משמרות</button>
+      <button onClick=${onClose}
+        class="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg text-sm font-semibold hover:bg-gray-200 transition-colors">
+        ביטול</button>
+    </div>
+  </div>`;
+}
+
+// ── BulkDeleteForm ───────────────────────────────────────────
+function BulkDeleteForm({shifts, onDelete, onClose}) {
+  const [sDate, setSDate] = useState('');
+  const [eDate, setEDate] = useState('');
+
+  const toDelete = useMemo(()=>{
+    if(!sDate||!eDate) return [];
+    const r = new Set(dateRange(sDate, eDate));
+    return shifts.filter(s=>r.has(s.date));
+  },[shifts,sDate,eDate]);
+
+  const submit = () => {
+    if(!sDate||!eDate) return alert('יש לבחור טווח תאריכים');
+    if(toDelete.length===0) return alert('אין משמרות בטווח זה');
+    if(!confirm('למחוק '+toDelete.length+' משמרות לצמיתות?')) return;
+    onDelete(new Set(toDelete.map(s=>s.id)));
+    onClose();
+  };
+
+  return html`<div class="space-y-4">
+    <div class="bg-red-50 border border-red-100 rounded-lg p-3 text-sm text-red-600">
+      ⚠️ פעולה זו תמחק לצמיתות את כל המשמרות בטווח התאריכים שנבחר.
+    </div>
+    <div class="grid grid-cols-2 gap-3">
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">מתאריך</label>
+        <input type="date" value=${sDate} onChange=${e=>setSDate(e.target.value)}
+          class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300"/>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">עד תאריך</label>
+        <input type="date" value=${eDate} onChange=${e=>setEDate(e.target.value)}
+          class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300"/>
+      </div>
+    </div>
+    ${sDate&&eDate&&html`<div class=${'rounded-lg p-3 text-sm text-center font-semibold '+(toDelete.length>0?'bg-red-50 text-red-600 border border-red-100':'bg-gray-50 text-gray-500')}>
+      ${toDelete.length>0?toDelete.length+' משמרות יימחקו':'אין משמרות בטווח זה'}
+    </div>`}
+    <div class="flex gap-2 pt-1">
+      <button onClick=${submit}
+        class=${'flex-1 py-2 rounded-lg text-sm font-semibold transition-colors '+(toDelete.length>0?'bg-red-500 text-white hover:bg-red-600':'bg-gray-200 text-gray-400 cursor-not-allowed')}>
+        🗑️ מחק ${toDelete.length>0?toDelete.length+' משמרות':''}
+      </button>
+      <button onClick=${onClose}
+        class="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg text-sm font-semibold hover:bg-gray-200 transition-colors">
+        ביטול
+      </button>
+    </div>
+  </div>`;
+}
+
+// ── ShiftDetailModal ─────────────────────────────────────────
+function ShiftDetailModal({shift, jobs, onEdit, onDelete, onClose}) {
+  const job = findJob(jobs, shift.jobId);
+  const tot = shift.earnings+(shift.travel||0)+(shift.bonus||0);
+  const today = todayS();
+  const isFut = shift.date > today;
+  return html`<div class="space-y-4">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-full flex-shrink-0" style=${{backgroundColor:(job&&job.color)||'#9CA3AF'}}/>
+      <div>
+        <div class="font-semibold text-gray-800">${(job&&job.name)||'לא ידוע'}</div>
+        <div class="text-sm text-gray-500">
+          ${new Date(shift.date+'T12:00:00').toLocaleDateString('he-IL',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}
+        </div>
+      </div>
+    </div>
+    <div class="bg-slate-50 rounded-lg p-3 space-y-1.5 text-sm">
+      <div class="flex justify-between"><span class="text-gray-500">שכר בסיס</span><span class="font-medium">${fmt(shift.earnings)}</span></div>
+      ${shift.travel>0&&html`<div class="flex justify-between"><span class="text-gray-500">נסיעות</span><span class="font-medium">${fmt(shift.travel)}</span></div>`}
+      ${shift.bonus>0&&html`<div class="flex justify-between"><span class="text-gray-500">בונוס</span><span class="font-medium">${fmt(shift.bonus)}</span></div>`}
+      ${shift.hours>0&&html`<div class="flex justify-between"><span class="text-gray-500">שעות</span><span class="font-medium">${shift.hours}</span></div>`}
+      <div class="flex justify-between pt-1.5 border-t border-gray-200">
+        <span class="font-semibold text-gray-700">סה"כ</span>
+        <span class="font-bold text-emerald-600 text-base">${fmt(tot)}</span>
+      </div>
+    </div>
+    <div class="flex gap-1.5 flex-wrap">
+      ${isFut&&html`<span class="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full">📅 משמרת עתידית</span>`}
+      ${shift.isPaid&&html`<span class="text-xs bg-emerald-100 text-emerald-700 px-2 py-1 rounded-full">✓ שולם</span>`}
+      ${!shift.isPaid&&!isFut&&html`<span class="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded-full">⏳ ממתין לתשלום</span>`}
+    </div>
+    ${shift.notes&&html`<div class="text-sm text-gray-500 italic">"${shift.notes}"</div>`}
+    <div class="flex gap-2 pt-1">
+      <button onClick=${onEdit}   class="flex-1 bg-blue-500 text-white py-2 rounded-lg text-sm font-semibold hover:bg-blue-600">✏️ ערוך</button>
+      <button onClick=${onDelete} class="flex-1 bg-red-500 text-white py-2 rounded-lg text-sm font-semibold hover:bg-red-600">🗑️ מחק</button>
+      <button onClick=${onClose}  class="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg text-sm font-semibold hover:bg-gray-200">סגור</button>
+    </div>
+  </div>`;
+}
+
+// ── JobsPage ─────────────────────────────────────────────────
+function JobsPage({jobs,setJobs}) {
+  const [modal,setModal]=useState(null);
+  const editing = (modal&&modal!=='add') ? findJob(jobs,modal) : null;
+  const save = data => {
+    setJobs(j=>editing?j.map(x=>x.id===editing.id?{...x,...data}:x):[...j,{id:genId(),...data}]);
+    setModal(null);
+  };
+  const del = id => { if(confirm('למחוק משרה זו?')) setJobs(j=>j.filter(x=>x.id!==id)); };
+  return html`<div class="space-y-4">
+    <div class="flex items-center justify-between">
+      <h2 class="text-base font-bold text-gray-800">המשרות שלי</h2>
+      <button onClick=${()=>setModal('add')} class="bg-blue-500 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-blue-600 transition-colors">+ הוסף משרה</button>
+    </div>
+    ${jobs.length===0?html`
+      <div class="text-center py-16 text-gray-400 bg-white rounded-xl border border-gray-100">
+        <div class="text-5xl mb-3">💼</div>
+        <div class="font-medium">אין משרות עדיין</div>
+        <div class="text-sm mt-1">הוסף את המשרה הראשונה שלך</div>
+      </div>`:html`
+      <div class="grid gap-3 sm:grid-cols-2">
+        ${jobs.map(job=>html`<div key=${job.id} class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm fade">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="w-11 h-11 rounded-full flex-shrink-0" style=${{backgroundColor:job.color}}/>
+              <div>
+                <div class="font-semibold text-gray-800">${job.name}</div>
+                <div class="text-sm text-gray-500">${job.rateType==='daily'?fmt(job.rate)+' ליום':job.rateType==='hourly'?fmt(job.rate)+' לשעה':fmt(job.rate)+' לחודש'}</div>
+              </div>
+            </div>
+            <div class="flex gap-1">
+              <button onClick=${()=>setModal(job.id)} class="p-1.5 rounded hover:bg-blue-50 text-gray-400 hover:text-blue-500">✏️</button>
+              <button onClick=${()=>del(job.id)}      class="p-1.5 rounded hover:bg-red-50  text-gray-400 hover:text-red-500">🗑️</button>
+            </div>
+          </div>
+        </div>`)}
+      </div>`}
+    ${modal&&html`<${Modal} title=${modal==='add'?'הוסף משרה':'ערוך משרה'} onClose=${()=>setModal(null)}>
+      <${JobForm} initial=${editing} onSave=${save} onClose=${()=>setModal(null)}/>
+    <//>`}
+  </div>`;
+}
+
+// ── ShiftsPage ───────────────────────────────────────────────
+function ShiftsPage({shifts,setShifts,jobs}) {
+  const now=new Date();
+  const [year, setYear]       =useState(now.getFullYear());
+  const [month,setMonth]      =useState(now.getMonth());
+  const [view, setView]       =useState('calendar');
+  const [modal,setModal]            =useState(null);
+  const [detailShift,setDetailShift]=useState(null);
+  const [bulkModal,setBulkModal]    =useState(null);
+  const [deleteModal,setDeleteModal]=useState(false);
+  const today=todayS();
+
+  const markMonthPaid=()=>{
+    const ids=new Set(ms.filter(s=>s.date<=today).map(s=>s.id));
+    if(ids.size===0) return alert('אין משמרות שעברו בחודש זה לסימון');
+    if(!confirm('לסמן '+ids.size+' משמרות כשולם?')) return;
+    setShifts(s=>s.map(x=>ids.has(x.id)?{...x,isPaid:true}:x));
+  };
+
+  const ms=useMemo(()=>shifts.filter(s=>{
+    const [y,m]=s.date.split('-').map(Number); return y===year&&m===month+1;
+  }),[shifts,year,month]);
+
+  const editing=(modal&&modal.id)?modal:null;
+  const save=data=>{
+    setShifts(s=>editing?s.map(x=>x.id===editing.id?{...x,...data}:x):[...s,{id:genId(),...data}]);
+    setModal(null);
+  };
+  const del=id=>{
+    if(confirm('למחוק משמרת זו?')) {
+      setShifts(s=>s.filter(x=>x.id!==id));
+      setDetailShift(null);
+      setModal(null);
+    }
+  };
+  const sorted=[...ms].sort((a,b)=>b.date<a.date?-1:b.date>a.date?1:0);
+
+  return html`<div class="space-y-4">
+    <div class="flex items-center justify-between flex-wrap gap-2">
+      <${MonthNav} year=${year} month=${month} onChange=${(y,m)=>{setYear(y);setMonth(m);}}/>
+      <div class="flex items-center gap-2">
+        <div class="flex rounded-lg border border-gray-200 overflow-hidden">
+          ${[['calendar','📅 לוח'],['list','📋 רשימה']].map(([v,l])=>html`
+            <button key=${v} onClick=${()=>setView(v)}
+              class=${'px-3 py-1.5 text-xs font-medium transition-colors '+(view===v?'bg-blue-500 text-white':'text-gray-600 hover:bg-gray-50')}>
+              ${l}</button>`)}
+        </div>
+        <button onClick=${()=>setModal({prefillDate:null})} class="bg-blue-500 text-white px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-blue-600 transition-colors">+ משמרת</button>
+        <button onClick=${markMonthPaid} class="bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-emerald-600 transition-colors">✓ סמן חודש כשולם</button>
+        <button onClick=${()=>setDeleteModal(true)} class="bg-red-500 text-white px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-red-600 transition-colors">🗑️ מחיקה מרובה</button>
+      </div>
+    </div>
+
+    ${view==='calendar'?html`
+      <div class="bg-white rounded-xl border border-gray-100 p-3 shadow-sm">
+        <${CalendarView} year=${year} month=${month} shifts=${ms} jobs=${jobs}
+          onDayClick=${ds=>setModal({prefillDate:ds})}
+          onShiftClick=${s=>setModal(s)}
+          onRangeSelect=${(s,e)=>setBulkModal({startDate:s,endDate:e})}/>
+      </div>
+      <div class="text-xs text-gray-400 text-center mt-1">גרור בלוח לבחירת טווח תאריכים להוספה מרובה</div>`:html`
+      <div class="space-y-2">
+        ${ms.length===0?html`
+          <div class="text-center py-14 text-gray-400 bg-white rounded-xl border border-gray-100">
+            <div class="text-4xl mb-2">📋</div>
+            <div class="text-sm">אין משמרות בחודש זה</div>
+          </div>`:
+        sorted.map(s=>{
+          const job=findJob(jobs,s.jobId);
+          const tot=s.earnings+(s.travel||0)+(s.bonus||0);
+          const fut=s.date>today;
+          return html`<div key=${s.id} class="bg-white rounded-xl border border-gray-100 p-3 shadow-sm fade">
+            <div class="flex items-start justify-between gap-2">
+              <div class="flex items-start gap-2.5">
+                <div class="w-1 h-12 rounded-full mt-0.5 flex-shrink-0" style=${{backgroundColor:(job&&job.color)||'#9CA3AF'}}/>
+                <div>
+                  <div class="flex items-center flex-wrap gap-1.5 mb-0.5">
+                    <span class="font-semibold text-gray-800 text-sm">${(job&&job.name)||'לא ידוע'}</span>
+                    ${fut&&html`<span class="text-[10px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded-full">צפוי</span>`}
+                    ${s.isPaid&&html`<span class="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full">שולם ✓</span>`}
+                    ${!s.isPaid&&!fut&&html`<span class="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">ממתין</span>`}
+                  </div>
+                  <div class="text-xs text-gray-400">
+                    ${new Date(s.date+'T12:00:00').toLocaleDateString('he-IL',{weekday:'short',day:'numeric',month:'long'})}
+                    ${s.hours>0?' · '+s.hours+' שע\''  :''}
+                    ${s.travel>0?' · נסיעות '+fmt(s.travel):''}
+                    ${s.bonus>0 ?' · בונוס '  +fmt(s.bonus) :''}
+                  </div>
+                  ${s.notes&&html`<div class="text-xs text-gray-400 mt-0.5 italic">${s.notes}</div>`}
+                </div>
+              </div>
+              <div class="flex items-center gap-1 flex-shrink-0">
+                <span class="font-bold text-emerald-600">${fmt(tot)}</span>
+                <button onClick=${()=>setModal(s)} class="p-1 rounded hover:bg-blue-50 text-gray-400 hover:text-blue-500 text-sm">✏️</button>
+                <button onClick=${()=>del(s.id)}   class="p-1 rounded hover:bg-red-50  text-gray-400 hover:text-red-500  text-sm">🗑️</button>
+              </div>
+            </div>
+          </div>`;
+        })}
+      </div>`}
+
+    ${deleteModal&&html`<${Modal} title="מחיקה מרובה לפי טווח תאריכים" onClose=${()=>setDeleteModal(false)}>
+      <${BulkDeleteForm} shifts=${shifts}
+        onDelete=${ids=>setShifts(s=>s.filter(x=>!ids.has(x.id)))}
+        onClose=${()=>setDeleteModal(false)}/>
+    <//>`}
+
+    ${bulkModal&&html`<${Modal} title="הוספת משמרות לטווח תאריכים" onClose=${()=>setBulkModal(null)}>
+      <${BulkShiftForm}
+        startDate=${bulkModal.startDate} endDate=${bulkModal.endDate}
+        jobs=${jobs} shifts=${shifts}
+        onSave=${newShifts=>setShifts(s=>[...s,...newShifts])}
+        onClose=${()=>setBulkModal(null)}/>
+    <//>`}
+
+    ${detailShift&&html`<${Modal} title="פרטי משמרת" onClose=${()=>setDetailShift(null)}>
+      <${ShiftDetailModal} shift=${detailShift} jobs=${jobs}
+        onEdit=${()=>{ setModal(detailShift); setDetailShift(null); }}
+        onDelete=${()=>del(detailShift.id)}
+        onClose=${()=>setDetailShift(null)}/>
+    <//>`}
+
+    ${modal&&html`<${Modal} title=${editing?'ערוך משמרת':'הוסף משמרת'} onClose=${()=>setModal(null)}>
+      <${ShiftForm}
+        initial=${editing||(modal.prefillDate?{date:modal.prefillDate}:null)}
+        jobs=${jobs} shifts=${shifts} onSave=${save} onClose=${()=>setModal(null)}
+        onDelete=${editing?()=>del(editing.id):null}/>
+    <//>`}
+  </div>`;
+}
+
+// ── DashboardPage ────────────────────────────────────────────
+function DashboardPage({shifts,jobs,settings}) {
+  const now=new Date();
+  const [year,setYear]=useState(now.getFullYear());
+  const [month,setMonth]=useState(now.getMonth());
+  const today=todayS();
+
+  const d=useMemo(()=>{
+    const ms=shifts.filter(s=>{const[y,m]=s.date.split('-').map(Number);return y===year&&m===month+1;});
+    const past=ms.filter(s=>s.date<=today), fut=ms.filter(s=>s.date>today);
+
+    // Monthly jobs: add job.rate once per unique monthly job with any shift this month
+    const monthlyJobIds=new Set();
+    ms.forEach(s=>{ const j=findJob(jobs,s.jobId); if(j&&j.rateType==='monthly') monthlyJobIds.add(s.jobId); });
+    const monthlyTotal=Array.from(monthlyJobIds).reduce((n,jid)=>{const j=findJob(jobs,jid);return n+(j?j.rate:0);},0);
+
+    const earn=arr=>arr.reduce((n,s)=>n+s.earnings+(s.travel||0)+(s.bonus||0),0);
+    const gA=earn(past)+monthlyTotal, gF=earn(ms)+monthlyTotal;
+    const paid=earn(past.filter(s=>s.isPaid)), pend=earn(past.filter(s=>!s.isPaid));
+    const nA=calcAll(gA,settings.creditPoints), nF=calcAll(gF,settings.creditPoints);
+    const byJob={};
+    ms.forEach(s=>{
+      const k=s.jobId; byJob[k]=byJob[k]||{shifts:0,earn:0};
+      byJob[k].shifts++; byJob[k].earn+=s.earnings+(s.travel||0)+(s.bonus||0);
+    });
+    // Add monthly rate to each monthly job's byJob entry
+    monthlyJobIds.forEach(jid=>{ const j=findJob(jobs,jid); if(j&&byJob[jid]) byJob[jid].earn+=j.rate; });
+    const hrs=ms.reduce((n,s)=>n+(s.hours||0),0);
+    return {ms,past,fut,gA,gF,paid,pend,nA,nF,byJob,hrs,monthlyTotal};
+  },[shifts,jobs,year,month,settings.creditPoints,today]);
+
+  return html`<div class="space-y-5">
+    <div class="flex items-center justify-between flex-wrap gap-2">
+      <h2 class="text-base font-bold text-gray-800">סיכום חודשי</h2>
+      <${MonthNav} year=${year} month=${month} onChange=${(y,m)=>{setYear(y);setMonth(m);}}/>
+    </div>
+
+    ${d.monthlyTotal>0&&html`
+      <div class="bg-blue-50 border border-blue-100 rounded-xl px-4 py-2.5 text-sm text-blue-700 flex items-center gap-2">
+        <span>💼</span>
+        <span>כולל שכר חודשי קבוע: <strong>${fmt(d.monthlyTotal)}</strong></span>
+      </div>`}
+
+    <div class="grid grid-cols-2 gap-3">
+      <${StatCard} label="ברוטו בפועל"   value=${fmt(d.gA)}         sub=${d.past.length+' משמרות'}         color="blue"   icon="💰"/>
+      <${StatCard} label="נטו משוער"      value=${fmt(d.nA.net)}     sub=${fmt(d.nA.total)+' ניכויים'}     color="green"  icon="✅"/>
+      <${StatCard} label="שולם"           value=${fmt(d.paid)}       sub="סומן כשולם"                      color="purple" icon="✓"/>
+      <${StatCard} label="ממתין לתשלום"  value=${fmt(d.pend)}       sub="טרם שולם"                         color="orange" icon="⏳"/>
+    </div>
+
+    ${d.fut.length>0&&html`
+      <div class="bg-gradient-to-l from-violet-50 to-blue-50 border border-violet-100 rounded-xl p-4">
+        <div class="text-xs font-semibold text-violet-700 mb-2">📈 תחזית (כולל ${d.fut.length} משמרות עתידיות)</div>
+        <div class="grid grid-cols-3 gap-3 text-center">
+          ${[['ברוטו צפוי',fmt(d.gF),'text-gray-700'],['נטו צפוי',fmt(d.nF.net),'text-emerald-600'],['שעות',String(d.hrs),'text-violet-600']]
+            .map(([l,v,c])=>html`<div key=${l}><div class="text-xs text-gray-500 mb-0.5">${l}</div><div class=${'text-lg font-bold '+c}>${v}</div></div>`)}
+        </div>
+      </div>`}
+
+    ${d.gA>0&&html`
+      <div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+        <h3 class="text-sm font-semibold text-gray-700 mb-3">ניכויים חודשיים (בפועל)</h3>
+        <div class="space-y-2">
+          ${[{l:'פנסיה (6%)',v:d.nA.pension,c:'#3B82F6'},{l:'ביטוח לאומי',v:d.nA.ni,c:'#F97316'},{l:'מס בריאות',v:d.nA.health,c:'#EAB308'},{l:'מס הכנסה',v:d.nA.incomeTax,c:'#EF4444'}]
+            .map(r=>html`<div key=${r.l} class="flex items-center gap-2">
+              <div class="w-2.5 h-2.5 rounded-full flex-shrink-0" style=${{backgroundColor:r.c}}/>
+              <span class="text-xs text-gray-600 flex-1">${r.l}</span>
+              <span class="text-xs font-semibold text-gray-700">${fmt(r.v)}</span>
+              <span class="text-xs text-gray-400 w-10 text-left">${d.gA>0?((r.v/d.gA)*100).toFixed(1)+'%':''}</span>
+            </div>`)}
+          <div class="flex justify-between pt-2 border-t border-gray-100 font-semibold text-sm">
+            <span class="text-gray-700">סה"כ ניכויים</span><span class="text-red-600">${fmt(d.nA.total)}</span>
+          </div>
+        </div>
+      </div>`}
+
+    ${Object.keys(d.byJob).length>0&&html`
+      <div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+        <h3 class="text-sm font-semibold text-gray-700 mb-3">פירוט לפי משרה</h3>
+        <div class="space-y-3">
+          ${Object.keys(d.byJob).map(jid=>{
+            const jd=d.byJob[jid], job=findJob(jobs,jid), pct=d.gF>0?(jd.earn/d.gF*100):0;
+            return html`<div key=${jid}>
+              <div class="flex justify-between text-xs mb-1">
+                <div class="flex items-center gap-1.5">
+                  <div class="w-2.5 h-2.5 rounded-full" style=${{backgroundColor:(job&&job.color)||'#9CA3AF'}}/>
+                  <span class="text-gray-700 font-medium">${(job&&job.name)||'לא ידוע'}</span>
+                  <span class="text-gray-400">${jd.shifts} משמרות</span>
+                </div>
+                <span class="font-semibold">${fmt(jd.earn)}</span>
+              </div>
+              <div class="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                <div class="h-full rounded-full" style=${{width:pct+'%',backgroundColor:(job&&job.color)||'#9CA3AF'}}/>
+              </div>
+            </div>`;
+          })}
+        </div>
+      </div>`}
+
+    ${d.ms.length===0&&html`
+      <div class="text-center py-14 text-gray-400 bg-white rounded-xl border border-gray-100">
+        <div class="text-5xl mb-2">📊</div>
+        <div class="font-medium">אין נתונים לחודש זה</div>
+        <div class="text-sm mt-1">הוסף משמרות בלשונית "משמרות"</div>
+      </div>`}
+  </div>`;
+}
+
+// ── CalcPage ─────────────────────────────────────────────────
+function CalcPage({shifts,settings,setSettings}) {
+  const now=new Date();
+  const [year,setYear]=useState(now.getFullYear());
+  const [month,setMonth]=useState(now.getMonth());
+  const [manual,setManual]=useState(false);
+  const [mg,setMg]=useState('');
+
+  const autoG=useMemo(()=>{
+    const t=todayS();
+    return shifts.filter(s=>{const[y,m]=s.date.split('-').map(Number);return y===year&&m===month+1&&s.date<=t;})
+      .reduce((n,s)=>n+s.earnings+(s.travel||0)+(s.bonus||0),0);
+  },[shifts,year,month]);
+
+  const gross=manual?(+mg||0):autoG;
+  const res=useMemo(()=>calcAll(gross,settings.creditPoints),[gross,settings.creditPoints]);
+
+  return html`<div class="space-y-4">
+    <h2 class="text-base font-bold text-gray-800">מחשבון שכר נטו (שכיר ישראלי)</h2>
+
+    <div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+      <div class="flex items-center justify-between mb-2">
+        <span class="text-sm font-medium text-gray-700">נקודות זיכוי</span>
+        <div class="flex items-center gap-2">
+          <input type="number" step="0.25" min="0" max="15" value=${settings.creditPoints}
+            onChange=${e=>setSettings(s=>({...s,creditPoints:+e.target.value||0}))}
+            class="w-20 border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-blue-300"/>
+          <span class="text-xs text-gray-400">= ₪${Math.round(settings.creditPoints*CVAL)}/חודש</span>
+        </div>
+      </div>
+      <div class="text-xs text-gray-400">רווק/ה: 2.25 · עם ילד: +2.5 · עולה חדש: +3</div>
+    </div>
+
+    <div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+      <div class="flex items-center justify-between mb-3">
+        <span class="text-sm font-semibold text-gray-700">ברוטו חודשי</span>
+        <div class="flex rounded-lg border border-gray-200 overflow-hidden">
+          <button onClick=${()=>setManual(false)} class=${'px-2 py-1 text-xs '+(!manual?'bg-blue-500 text-white':'text-gray-500 hover:bg-gray-50')}>לפי משמרות</button>
+          <button onClick=${()=>setManual(true)}  class=${'px-2 py-1 text-xs '+(manual?'bg-blue-500 text-white':'text-gray-500 hover:bg-gray-50')}>ידני</button>
+        </div>
+      </div>
+      ${!manual?html`
+        <div>
+          <${MonthNav} year=${year} month=${month} onChange=${(y,m)=>{setYear(y);setMonth(m);}}/>
+          <div class="text-3xl font-bold text-gray-800 mt-2">${fmt(autoG)}</div>
+          <div class="text-xs text-gray-400 mt-0.5">${MONTHS[month]} ${year} (משמרות בפועל)</div>
+        </div>`:html`
+        <input type="number" value=${mg} onInput=${e=>setMg(e.target.value)} placeholder="הזן ברוטו חודשי..."
+          class="w-full text-2xl font-bold border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-300 mt-1"/>`}
+    </div>
+
+    ${gross>0?html`
+      <div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+        <div class="text-center bg-slate-50 rounded-xl p-4 mb-4">
+          <div class="text-xs text-gray-500">ברוטו</div>
+          <div class="text-xl font-bold text-gray-600">${fmt(res.gross)}</div>
+          <div class="text-gray-300 text-2xl my-1">↓</div>
+          <div class="text-xs text-gray-500">נטו לקבלה</div>
+          <div class="text-4xl font-bold text-emerald-500">${fmt(res.net)}</div>
+          <div class="text-xs text-gray-400 mt-1">שיעור ניכוי: ${res.gross>0?((res.total/res.gross)*100).toFixed(1):0}%</div>
+        </div>
+        <h3 class="text-sm font-semibold text-gray-700 mb-2">פירוט ניכויים</h3>
+        ${[{l:'פנסיה עובד (6%)',v:res.pension,c:'#3B82F6'},{l:'ביטוח לאומי',v:res.ni,c:'#F97316'},{l:'מס בריאות',v:res.health,c:'#EAB308'},{l:'מס הכנסה ('+settings.creditPoints+' נק\')',v:res.incomeTax,c:'#EF4444'}]
+          .map(r=>html`<div key=${r.l} class="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
+            <div class="flex items-center gap-2">
+              <div class="w-2.5 h-2.5 rounded-full" style=${{backgroundColor:r.c}}/>
+              <span class="text-sm text-gray-700">${r.l}</span>
+            </div>
+            <div>
+              <span class="text-sm font-semibold text-gray-800">${fmt(r.v)}</span>
+              <span class="text-xs text-gray-400 mr-1">${res.gross>0?' ('+((r.v/res.gross)*100).toFixed(1)+'%)':''}</span>
+            </div>
+          </div>`)}
+        <div class="flex justify-between items-center pt-3 border-t-2 border-gray-200 font-bold mt-1">
+          <span class="text-gray-800">סה"כ ניכויים</span><span class="text-red-600 text-base">${fmt(res.total)}</span>
+        </div>
+        <div class="mt-3 bg-amber-50 border border-amber-100 rounded-lg p-3 text-xs text-amber-700">
+          ⚠️ הערכה בלבד לפי מדרגות 2025. אינו מחליף ייעוץ רואה חשבון. תקרת ב"ל: ₪${NI_CL.toLocaleString()}/חודש.
+        </div>
+      </div>`:html`
+      <div class="text-center py-12 text-gray-400 bg-white rounded-xl border border-gray-100">
+        <div class="text-4xl mb-2">🧮</div><div class="text-sm">הזן ברוטו חודשי לחישוב</div>
+      </div>`}
+  </div>`;
+}
+
+// ── GoogleDriveSection ───────────────────────────────────────
+function GoogleDriveSection({settings,setSettings,jobs,shifts,setJobs,setShifts}) {
+  const [token,  setToken]  = useState(()=>_gToken);
+  const [status, setStatus] = useState('');
+  const [busy,   setBusy]   = useState(false);
+
+  const clientId = (settings&&settings.gClientId)||'';
+  const SCOPE    = 'https://www.googleapis.com/auth/drive.file';
+  const FILE     = 'shifts_backup.json';
+
+  const setTok = t => { _gToken=t; setToken(t); };
+
+  const connect = () => {
+    if (!clientId.trim()) return alert('יש להזין Google Client ID תחילה');
+    if (!window.google||!window.google.accounts||!window.google.accounts.oauth2)
+      return alert('ספריית Google טרם נטענה. נסה שוב בעוד שנייה.');
+    window.google.accounts.oauth2.initTokenClient({
+      client_id: clientId.trim(),
+      scope: SCOPE,
+      callback: r => {
+        if (r.error) { setStatus('שגיאה: '+r.error); return; }
+        setTok(r.access_token);
+        setStatus('מחובר ✓');
+      }
+    }).requestAccessToken({prompt:'consent'});
+  };
+
+  const findFile = async () => {
+    const q = encodeURIComponent("name='"+FILE+"' and trashed=false");
+    const r = await fetch('https://www.googleapis.com/drive/v3/files?q='+q+'&fields=files(id)',
+      {headers:{Authorization:'Bearer '+token}});
+    const j = await r.json();
+    return j.files&&j.files[0] ? j.files[0].id : null;
+  };
+
+  const backup = async () => {
+    if (!token) return;
+    setBusy(true); setStatus('מגבה...');
+    try {
+      const content = JSON.stringify({jobs,shifts,settings,exportedAt:new Date().toISOString()},null,2);
+      const existId = await findFile();
+      if (existId) {
+        await fetch('https://www.googleapis.com/upload/drive/v3/files/'+existId+'?uploadType=media',
+          {method:'PATCH',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:content});
+      } else {
+        const b='--BOUND', meta=JSON.stringify({name:FILE,mimeType:'application/json'});
+        const body=[b+'\r\nContent-Type: application/json\r\n\r\n'+meta,
+                    b+'\r\nContent-Type: application/json\r\n\r\n'+content,b+'--'].join('\r\n');
+        await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
+          {method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'multipart/related; boundary=BOUND'},body});
+      }
+      setStatus('גיבוי הושלם ✓ '+new Date().toLocaleTimeString('he-IL'));
+    } catch(e) { setStatus('שגיאת גיבוי: '+e.message); }
+    setBusy(false);
+  };
+
+  const restore = async () => {
+    if (!token) return;
+    if (!confirm('שחזור יחליף את כל הנתונים הנוכחיים. להמשיך?')) return;
+    setBusy(true); setStatus('משחזר...');
+    try {
+      const id = await findFile();
+      if (!id) { setStatus('לא נמצא קובץ גיבוי ב-Drive'); setBusy(false); return; }
+      const r = await fetch('https://www.googleapis.com/drive/v3/files/'+id+'?alt=media',
+        {headers:{Authorization:'Bearer '+token}});
+      const d = await r.json();
+      if (d.jobs)    setJobs(d.jobs);
+      if (d.shifts)  setShifts(d.shifts);
+      if (d.settings){
+        const {darkMode,gClientId,...rest}=d.settings;
+        setSettings(s=>({...s,...rest}));
+      }
+      setStatus('שוחזר בהצלחה ✓');
+    } catch(e) { setStatus('שגיאת שחזור: '+e.message); }
+    setBusy(false);
+  };
+
+  return html`<div class="space-y-3">
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-1">Google Client ID</label>
+      <input value=${clientId} onInput=${e=>setSettings(s=>({...s,gClientId:e.target.value}))}
+        placeholder="xxxx.apps.googleusercontent.com"
+        class="w-full border border-gray-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-300 font-mono"/>
+      <p class="text-xs text-gray-400 mt-1">נדרש: Google Cloud Project → APIs & Services → Credentials → OAuth 2.0 Client ID</p>
+    </div>
+    ${token
+      ? html`<button onClick=${()=>{setTok(null);setStatus('');}}
+          class="w-full bg-gray-100 text-gray-700 py-2 rounded-lg text-sm font-medium hover:bg-gray-200">
+          ✕ התנתק מ-Google</button>
+        <div class="grid grid-cols-2 gap-2">
+          <button onClick=${backup} disabled=${busy}
+            class="bg-emerald-500 text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-emerald-600 disabled:opacity-50 transition-colors">
+            ${busy?'...':'☁️ גבה ל-Drive'}</button>
+          <button onClick=${restore} disabled=${busy}
+            class="bg-violet-500 text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-violet-600 disabled:opacity-50 transition-colors">
+            ${busy?'...':'⬇️ שחזר מ-Drive'}</button>
+        </div>`
+      : html`<button onClick=${connect}
+          class="w-full bg-blue-500 text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-blue-600 transition-colors">
+          🔑 חבר חשבון Google</button>`}
+    ${status&&html`<div class=${'text-xs text-center py-1.5 px-3 rounded-lg '+(status.includes('שגיאה')?'bg-red-50 text-red-600':'bg-blue-50 text-blue-700')}>
+      ${status}</div>`}
+  </div>`;
+}
+
+// ── SettingsPage ─────────────────────────────────────────────
+function SettingsPage({settings,setSettings,jobs,shifts,setJobs,setShifts}) {
+  const exp=()=>{
+    const data={jobs:JSON.parse(localStorage.getItem('sw_jobs')||'[]'),shifts:JSON.parse(localStorage.getItem('sw_shifts')||'[]'),settings:JSON.parse(localStorage.getItem('sw_settings')||'{}')};
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));
+    a.download='shifts_backup_'+todayS()+'.json'; a.click();
+  };
+  const imp=e=>{
+    const f=e.target.files[0]; if(!f) return;
+    const r=new FileReader();
+    r.onload=ev=>{ try { const d=JSON.parse(ev.target.result); if(d.jobs)setJobs(d.jobs); if(d.shifts)setShifts(d.shifts); if(d.settings)setSettings(d.settings); alert('יובא בהצלחה!'); } catch(err){alert('שגיאה: קובץ לא תקין');} };
+    r.readAsText(f); e.target.value='';
+  };
+  const clr=()=>{ if(!confirm('למחוק את כל הנתונים?')) return; setJobs([]); setShifts([]); alert('הנתונים נמחקו.'); };
+
+  return html`<div class="space-y-4">
+    <h2 class="text-base font-bold text-gray-800">הגדרות</h2>
+    <div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm space-y-3">
+      <h3 class="text-sm font-semibold text-gray-700">הגדרות מס</h3>
+      <div class="flex items-center justify-between">
+        <div>
+          <div class="text-sm text-gray-700">נקודות זיכוי (מס הכנסה)</div>
+          <div class="text-xs text-gray-400">רווק/ה: 2.25 · ילד ראשון: +2.5 · עולה: +3</div>
+        </div>
+        <input type="number" step="0.25" min="0" max="15" value=${settings.creditPoints}
+          onChange=${e=>setSettings(s=>({...s,creditPoints:+e.target.value||0}))}
+          class="w-20 border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-blue-300"/>
+      </div>
+      <div class="text-xs text-gray-400 bg-slate-50 rounded-lg p-2">נקודת זיכוי = ₪${CVAL}/חודש = ₪${CVAL*12}/שנה</div>
+    </div>
+    <div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm space-y-2">
+      <h3 class="text-sm font-semibold text-gray-700 mb-2">גיבוי ושחזור מקומי</h3>
+      <button onClick=${exp} class="w-full text-sm bg-blue-50 text-blue-700 py-2 rounded-lg hover:bg-blue-100 font-medium">📤 ייצא גיבוי (JSON)</button>
+      <label class="block w-full text-sm bg-emerald-50 text-emerald-700 py-2 rounded-lg hover:bg-emerald-100 font-medium text-center cursor-pointer">
+        📥 ייבא גיבוי<input type="file" accept=".json" onChange=${imp} class="hidden"/>
+      </label>
+    </div>
+    <div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+      <h3 class="text-sm font-semibold text-gray-700 mb-3">☁️ גיבוי Google Drive</h3>
+      <${GoogleDriveSection}
+        settings=${settings} setSettings=${setSettings}
+        jobs=${jobs} shifts=${shifts}
+        setJobs=${setJobs} setShifts=${setShifts}/>
+    </div>
+    <div class="text-center text-xs text-gray-400 py-2 leading-5">
+      כל הנתונים שמורים ב-LocalStorage במכשיר זה בלבד.<br/>חישובי המס הם הערכות ואינם מהווים ייעוץ מקצועי.
+    </div>
+  </div>`;
+}
+
+// ── App ──────────────────────────────────────────────────────
+function App() {
+  const [jobs,    setJobs]    =useLS('sw_jobs',    []);
+  const [shifts,  setShifts]  =useLS('sw_shifts',  []);
+  const [settings,setSettings]=useLS('sw_settings',{creditPoints:2.25,darkMode:false,gClientId:'365339624558-7t7arbt13od0i1frr0i3v0ernhsq6mhv.apps.googleusercontent.com'});
+  const [tab,     setTab]     =useState('dashboard');
+
+  const darkMode=!!(settings&&settings.darkMode);
+  const toggleDark=()=>setSettings(s=>({...s,darkMode:!s.darkMode}));
+
+  useEffect(()=>{
+    document.body.className=darkMode?'bg-slate-50 dark min-h-screen':'bg-slate-50 min-h-screen';
+  },[darkMode]);
+
+  const TABS=[{id:'dashboard',label:'דשבורד',icon:'📊'},{id:'shifts',label:'משמרות',icon:'📅'},{id:'jobs',label:'משרות',icon:'💼'},{id:'calc',label:'מחשבון',icon:'🧮'},{id:'settings',label:'הגדרות',icon:'⚙️'}];
+
+  return html`<div class=${'min-h-screen bg-slate-50 '+(darkMode?'dark':'')}>
+    <header class="bg-white border-b border-gray-200 sticky top-0 z-40 shadow-sm">
+      <div class="max-w-2xl mx-auto px-4">
+        <div class="flex items-center justify-between py-3">
+          <div><div class="font-bold text-gray-800">מעקב משמרות</div><div class="text-xs text-gray-400">ניהול הכנסות לשכיר ישראלי</div></div>
+          <div class="flex items-center gap-3">
+            <div class="flex items-center gap-1.5">
+              <span class="text-xs text-gray-400">${darkMode?'☀️':'🌙'}</span>
+              <button onClick=${toggleDark}
+                class=${'relative w-10 h-5 rounded-full transition-colors duration-300 focus:outline-none '+(darkMode?'bg-blue-500':'bg-gray-300')}
+                title=${darkMode?'עבור למצב בהיר':'עבור למצב כהה'}>
+                <span class=${'toggle-thumb absolute top-0.5 w-4 h-4 bg-white rounded-full shadow '+(darkMode?'right-0.5':'left-0.5')}/>
+              </button>
+            </div>
+            <span class="text-2xl">💼</span>
+          </div>
+        </div>
+        <nav class="flex -mb-px overflow-x-auto">
+          ${TABS.map(t=>html`
+            <button key=${t.id} onClick=${()=>setTab(t.id)}
+              class=${'flex items-center gap-1.5 px-3 py-2.5 text-xs font-semibold whitespace-nowrap border-b-2 transition-colors '+(tab===t.id?'border-blue-500 text-blue-600':'border-transparent text-gray-500 hover:text-gray-700')}>
+              <span>${t.icon}</span><span>${t.label}</span>
+            </button>`)}
+        </nav>
+      </div>
+    </header>
+    <main class="max-w-2xl mx-auto px-4 py-5">
+      <div class="fade">
+        ${tab==='dashboard'&&html`<${DashboardPage} shifts=${shifts} jobs=${jobs} settings=${settings}/>`}
+        ${tab==='shifts'   &&html`<${ShiftsPage}    shifts=${shifts} setShifts=${setShifts} jobs=${jobs}/>`}
+        ${tab==='jobs'     &&html`<${JobsPage}       jobs=${jobs}    setJobs=${setJobs}/>`}
+        ${tab==='calc'     &&html`<${CalcPage}       shifts=${shifts} settings=${settings} setSettings=${setSettings}/>`}
+        ${tab==='settings' &&html`<${SettingsPage}   settings=${settings} setSettings=${setSettings} jobs=${jobs} shifts=${shifts} setJobs=${setJobs} setShifts=${setShifts}/>`}
+      </div>
+    </main>
+  </div>`;
+}
+
+render(html`<${App}/>`, document.getElementById('root'));
+</script>
+</body>
+</html>
