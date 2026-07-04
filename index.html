@@ -397,19 +397,46 @@ function CalendarView({year,month,shifts,jobs,onDayClick,onShiftClick,onRangeSel
   const [dragStart,setDragStart]=useState(null);
   const [dragEnd,  setDragEnd]  =useState(null);
   const dragRef=useRef({active:false,start:null,end:null});
+  const tRef=useRef({timer:null,pendingTap:null,moved:false,isTouch:false});
+
+  const commitDrag=useCallback(()=>{
+    const {start,end}=dragRef.current;
+    dragRef.current={active:false,start:null,end:null};
+    setDragStart(null); setDragEnd(null);
+    if(start&&end&&start!==end) { onRangeSelect&&onRangeSelect(start,end); }
+    else if(start) { onDayClick(start); }
+  },[onDayClick,onRangeSelect]);
 
   useEffect(()=>{
-    const up=()=>{
-      if(!dragRef.current.active) return;
-      const {start,end}=dragRef.current;
-      dragRef.current={active:false,start:null,end:null};
-      setDragStart(null); setDragEnd(null);
-      if(start&&end&&start!==end) { onRangeSelect&&onRangeSelect(start,end); }
-      else if(start) { onDayClick(start); }
-    };
+    const up=()=>{ if(dragRef.current.active) commitDrag(); };
     window.addEventListener('mouseup',up);
     return ()=>window.removeEventListener('mouseup',up);
-  },[onDayClick,onRangeSelect]);
+  },[commitDrag]);
+
+  // ── Touch (long-press to select / drag) ──
+  useEffect(()=>{
+    const move=e=>{
+      if(!dragRef.current.active){
+        tRef.current.moved=true;
+        clearTimeout(tRef.current.timer);
+        return;
+      }
+      e.preventDefault();
+      const t=e.touches[0]; if(!t) return;
+      const el=document.elementFromPoint(t.clientX,t.clientY);
+      const dd=el&&el.closest&&el.closest('[data-date]');
+      if(dd){ const ds=dd.getAttribute('data-date'); dragRef.current.end=ds; setDragEnd(ds); }
+    };
+    const end=()=>{
+      clearTimeout(tRef.current.timer);
+      if(dragRef.current.active){ commitDrag(); }
+      else if(tRef.current.pendingTap&&!tRef.current.moved){ onDayClick(tRef.current.pendingTap); }
+      tRef.current.pendingTap=null; tRef.current.moved=false;
+    };
+    window.addEventListener('touchmove',move,{passive:false});
+    window.addEventListener('touchend',end);
+    return ()=>{ window.removeEventListener('touchmove',move); window.removeEventListener('touchend',end); };
+  },[commitDrag,onDayClick]);
 
   const selSet=useMemo(()=>{
     if(!dragStart||!dragEnd) return new Set();
@@ -433,8 +460,9 @@ function CalendarView({year,month,shifts,jobs,onDayClick,onShiftClick,onRangeSel
           (inDrag?'cal-drag ':isT?'border-blue-400 bg-blue-50 ':
            'border-transparent hover:border-gray-200 hover:bg-gray-50 ')+
           (isPast&&!isT&&!inDrag?'bg-gray-50/40':'');
-        return html`<div key=${day} class=${cls}
+        return html`<div key=${day} class=${cls} data-date=${ds}
           onMouseDown=${e=>{
+            if(tRef.current.isTouch) return;
             e.preventDefault();
             dragRef.current={active:true,start:ds,end:ds};
             setDragStart(ds); setDragEnd(ds);
@@ -443,17 +471,30 @@ function CalendarView({year,month,shifts,jobs,onDayClick,onShiftClick,onRangeSel
             if(!dragRef.current.active) return;
             dragRef.current.end=ds;
             setDragEnd(ds);
+          }}
+          onTouchStart=${e=>{
+            tRef.current.isTouch=true;
+            if(e.target.closest&&e.target.closest('[data-shift]')) return;
+            tRef.current.pendingTap=ds; tRef.current.moved=false;
+            clearTimeout(tRef.current.timer);
+            tRef.current.timer=setTimeout(()=>{
+              dragRef.current={active:true,start:ds,end:ds};
+              setDragStart(ds); setDragEnd(ds);
+              navigator.vibrate&&navigator.vibrate(30);
+            },350);
           }}>
           <div class=${'text-xs font-semibold mb-0.5 '+(isT?'text-blue-600':'text-gray-500')}>${day}</div>
           ${ds2.slice(0,2).map(s=>{ const j=findJob(jobs,s.jobId); return html`
-            <div key=${s.id} onClick=${e=>{e.stopPropagation();onShiftClick(s);}}
+            <div key=${s.id} data-shift="1" onClick=${e=>{e.stopPropagation();onShiftClick(s);}}
               class="text-[10px] px-1 py-0.5 rounded text-white truncate mb-0.5 hover:opacity-80"
               style=${{backgroundColor:(j&&j.color)||'#9CA3AF'}}>${(j&&j.name)||'?'}</div>`;})}
           ${ds2.length>2&&html`<div class="text-[10px] text-gray-400">+${ds2.length-2}</div>`}
         </div>`;
       })}
     </div>
-    ${selSet.size>0&&html`<div class="mt-2 text-xs text-blue-600 text-center">גוררים — ${selSet.size} ימים נבחרו</div>`}
+    ${selSet.size>0
+      ? html`<div class="mt-2 text-xs text-blue-600 text-center">נבחרו ${selSet.size} ימים</div>`
+      : html`<div class="mt-2 text-[11px] text-gray-400 text-center">💡 לחיצה ארוכה + גרירה לבחירת טווח ימים</div>`}
   </div>`;
 }
 
@@ -716,6 +757,7 @@ function ShiftsPage({shifts,setShifts,jobs}) {
               ${l}</button>`)}
         </div>
         <button onClick=${()=>setModal({prefillDate:null})} class="bg-blue-500 text-white px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-blue-600 transition-colors">+ משמרת</button>
+        <button onClick=${()=>setBulkModal({startDate:null,endDate:null})} class="bg-indigo-500 text-white px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-indigo-600 transition-colors">+ טווח</button>
         <button onClick=${markMonthPaid} class="bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-emerald-600 transition-colors">✓ סמן חודש כשולם</button>
         <button onClick=${()=>setDeleteModal(true)} class="bg-red-500 text-white px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-red-600 transition-colors">🗑️ מחיקה מרובה</button>
       </div>
@@ -728,7 +770,7 @@ function ShiftsPage({shifts,setShifts,jobs}) {
           onShiftClick=${s=>setModal(s)}
           onRangeSelect=${(s,e)=>setBulkModal({startDate:s,endDate:e})}/>
       </div>
-      <div class="text-xs text-gray-400 text-center mt-1">גרור בלוח לבחירת טווח תאריכים להוספה מרובה</div>`:html`
+      <div class="text-xs text-gray-400 text-center mt-1">מחשב: גרור בלוח · טלפון: לחיצה ארוכה + גרירה · או כפתור "+ טווח"</div>`:html`
       <div class="space-y-2">
         ${ms.length===0?html`
           <div class="text-center py-14 text-gray-400 bg-white rounded-xl border border-gray-100">
