@@ -337,14 +337,9 @@ function ShiftForm({initial, jobs, shifts, onSave, onClose, onDelete}) {
   const baseEarn   = isMonthly ? 0 : (job?(job.rateType==='daily'?job.rate:job.rate*(+hours||0)):0);
   const total      = baseEarn+(+travel||0)+(+bonus||0);
 
-  // One shift per day: exclude the shift being edited
-  const editingId  = initial && initial.id;
-  const dateConflict = date && (shifts||[]).some(s=>s.date===date && s.id!==editingId);
-
   const submit = () => {
     if (!jobId) return alert('יש לבחור משרה');
     if (!date)  return alert('יש לבחור תאריך');
-    if (dateConflict) return alert('כבר קיימת משמרת בתאריך זה.\nניתן להוסיף משמרת אחת ביום בלבד.');
     onSave({jobId,date,hours:+hours||0,travel:+travel||0,bonus:+bonus||0,isPaid,notes,earnings:baseEarn});
   };
 
@@ -365,8 +360,7 @@ function ShiftForm({initial, jobs, shifts, onSave, onClose, onDelete}) {
     <div>
       <label class="block text-sm font-medium text-gray-700 mb-1">תאריך</label>
       <input type="date" value=${date} onChange=${e=>setDate(e.target.value)}
-        class=${'w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 '+(dateConflict?'border-red-300 focus:ring-red-300':'border-gray-200 focus:ring-blue-300')}/>
-      ${dateConflict&&html`<p class="text-xs text-red-500 mt-1">⚠️ כבר קיימת משמרת בתאריך זה</p>`}
+        class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
     </div>
     ${isMonthly?html`
       <div class="bg-blue-50 border border-blue-100 rounded-lg p-3 text-sm text-blue-700">
@@ -757,6 +751,35 @@ function JobsPage({jobs,setJobs}) {
   </div>`;
 }
 
+// ── DayModal (all shifts of a day + add) ─────────────────────
+function DayModal({date,shifts,jobs,onEditShift,onDeleteShift,onAddShift}) {
+  const dayShifts=(shifts||[]).filter(s=>s.date===date);
+  const dateLabel=new Date(date+'T12:00:00').toLocaleDateString('he-IL',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  return html`<div class="space-y-3">
+    <div class="text-sm text-gray-500">${dateLabel}</div>
+    ${dayShifts.length===0
+      ? html`<div class="text-sm text-gray-400 text-center py-4">אין משמרות ביום זה</div>`
+      : dayShifts.map(s=>{
+          const job=findJob(jobs,s.jobId); const tot=s.earnings+(s.travel||0)+(s.bonus||0);
+          return html`<div key=${s.id} class="flex items-center justify-between border border-gray-100 rounded-lg p-2.5">
+            <div class="flex items-center gap-2 flex-1 cursor-pointer" onClick=${()=>onEditShift(s)}>
+              <div class="w-1 h-9 rounded-full flex-shrink-0" style=${{backgroundColor:(job&&job.color)||'#9CA3AF'}}/>
+              <div>
+                <div class="text-sm font-semibold text-gray-800">${(job&&job.name)||'לא ידוע'}</div>
+                <div class="text-xs text-gray-400">${s.hours>0?s.hours+' שע\' · ':''}${fmt(tot)}${s.isPaid?' · שולם ✓':''}</div>
+              </div>
+            </div>
+            <div class="flex gap-1 flex-shrink-0">
+              <button onClick=${()=>onEditShift(s)}    class="p-1.5 rounded hover:bg-blue-50 text-gray-400 hover:text-blue-500">✏️</button>
+              <button onClick=${()=>onDeleteShift(s.id)} class="p-1.5 rounded hover:bg-red-50  text-gray-400 hover:text-red-500">🗑️</button>
+            </div>
+          </div>`;
+        })}
+    <button onClick=${onAddShift} class="w-full bg-blue-500 text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-blue-600 transition-colors">➕ הוסף משמרת ליום זה</button>
+    <div class="text-[11px] text-gray-400 text-center">טיפ: לחיצה ארוכה בלוח לבחירה מרובה של ימים</div>
+  </div>`;
+}
+
 // ── ShiftsPage ───────────────────────────────────────────────
 function ShiftsPage({shifts,setShifts,jobs}) {
   const now=new Date();
@@ -767,6 +790,7 @@ function ShiftsPage({shifts,setShifts,jobs}) {
   const [detailShift,setDetailShift]=useState(null);
   const [bulkModal,setBulkModal]    =useState(null);
   const [deleteModal,setDeleteModal]=useState(false);
+  const [dayModal,setDayModal]      =useState(null);
   const today=todayS();
 
   const markMonthPaid=()=>{
@@ -819,8 +843,8 @@ function ShiftsPage({shifts,setShifts,jobs}) {
     ${view==='calendar'?html`
       <div class="bg-white rounded-xl border border-gray-100 p-3 shadow-sm">
         <${CalendarView} year=${year} month=${month} shifts=${ms} jobs=${jobs}
-          onDayClick=${ds=>{ const ex=shifts.find(s=>s.date===ds); setModal(ex||{prefillDate:ds}); }}
-          onShiftClick=${s=>setModal(s)}
+          onDayClick=${ds=>setDayModal(ds)}
+          onShiftClick=${s=>setDayModal(s.date)}
           onRangeSelect=${(s,e)=>setBulkModal({startDate:s,endDate:e})}/>
       </div>
       <div class="text-xs text-gray-400 text-center mt-1">מחשב: גרור בלוח · טלפון: לחיצה ארוכה + גרירה · או כפתור "+ טווח"</div>`:html`
@@ -863,6 +887,13 @@ function ShiftsPage({shifts,setShifts,jobs}) {
           </div>`;
         })}
       </div>`}
+
+    ${dayModal&&html`<${Modal} title="משמרות ליום" onClose=${()=>setDayModal(null)}>
+      <${DayModal} date=${dayModal} shifts=${shifts} jobs=${jobs}
+        onEditShift=${s=>{ setModal(s); setDayModal(null); }}
+        onDeleteShift=${id=>{ if(confirm('למחוק משמרת זו?')) removeShifts(new Set([id])); }}
+        onAddShift=${()=>{ const dd=dayModal; setDayModal(null); setModal({prefillDate:dd}); }}/>
+    <//>`}
 
     ${deleteModal&&html`<${Modal} title="מחיקה מרובה לפי טווח תאריכים" onClose=${()=>setDeleteModal(false)}>
       <${BulkDeleteForm} shifts=${shifts}
@@ -928,14 +959,23 @@ function DashboardPage({shifts,jobs,settings}) {
   },[shifts,jobs,year,month,settings.creditPoints,today]);
 
   // ── Sharing ──
-  const [shareScope,setShareScope]=useState('month'); // 'month' | 'all'
+  const [shareScope,setShareScope]=useState(()=>{const n=new Date();return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');}); // 'all' | 'YYYY-MM'
   const [shareJob,  setShareJob]  =useState('all');   // 'all' | jobId
+  const shareMonths=useMemo(()=>{
+    const set=new Set(shifts.map(s=>s.date.slice(0,7)));
+    const n=new Date(); set.add(n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0'));
+    return [...set].sort().reverse();
+  },[shifts]);
   const shareList=()=>{
-    let list = shareScope==='all' ? shifts.slice() : shifts.filter(s=>{const[y,m]=s.date.split('-').map(Number);return y===year&&m===month+1;});
+    let list = shareScope==='all' ? shifts.slice() : shifts.filter(s=>s.date.slice(0,7)===shareScope);
     if(shareJob!=='all') list=list.filter(s=>s.jobId===shareJob);
     return list.sort((a,b)=>a.date<b.date?-1:1);
   };
-  const sharePeriod=()=> shareScope==='all' ? 'מאז תחילת העבודה' : MONTHS[month]+' '+year;
+  const sharePeriod=()=>{
+    if(shareScope==='all') return 'מאז תחילת העבודה';
+    const [y,m]=shareScope.split('-').map(Number);
+    return MONTHS[m-1]+' '+y;
+  };
   const shareText=()=>{
     const list=shareList();
     const names=[...new Set(list.map(s=>s.jobId))].map(id=>{const j=findJob(jobs,id);return j?j.name:null;}).filter(Boolean);
@@ -993,7 +1033,7 @@ function DashboardPage({shifts,jobs,settings}) {
             <span class="block text-xs text-gray-400 mb-1">תקופה</span>
             <select value=${shareScope} onChange=${e=>setShareScope(e.target.value)}
               class="w-full border border-gray-200 rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
-              <option value="month">${MONTHS[month]+' '+year}</option>
+              ${shareMonths.map(ym=>{const[y,m]=ym.split('-').map(Number);return html`<option key=${ym} value=${ym}>${MONTHS[m-1]+' '+y}</option>`;})}
               <option value="all">מאז שהתחלתי לעבוד</option>
             </select>
           </div>
