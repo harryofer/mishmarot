@@ -136,7 +136,8 @@ const COLORS = ['#3B82F6','#10B981','#8B5CF6','#EF4444','#F97316','#EC4899','#14
 // ── Helpers ──────────────────────────────────────────────────
 const genId   = () => Date.now().toString(36) + Math.random().toString(36).slice(2,5);
 const todayS  = () => new Date().toISOString().slice(0,10);
-const fmt     = n  => '₪' + Math.round(n).toLocaleString('he-IL');
+let _privacy = false;
+const fmt     = n  => _privacy ? '₪•••' : '₪' + Math.round(n).toLocaleString('he-IL');
 const mDays     = (y,m) => new Date(y,m+1,0).getDate();
 function dateRange(a,b) {
   const s=a<b?a:b, e=a<b?b:a, out=[];
@@ -148,6 +149,13 @@ function dateRange(a,b) {
 // Module-level Google token (survives tab switches, clears on page reload)
 let _gToken = null;
 let _gClient = null;
+async function deleteGcalEvent(id){
+  if(!id||!_gToken) return;
+  try{
+    await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events/'+id,
+      {method:'DELETE',headers:{Authorization:'Bearer '+_gToken}});
+  }catch(e){}
+}
 
 // ── Tax (Israel 2025 estimate) ───────────────────────────────
 const BRACKETS  = [{l:7380,r:.10},{l:10620,r:.14},{l:17040,r:.20},{l:22440,r:.31},{l:46640,r:.35},{l:60130,r:.47},{l:1e9,r:.50}];
@@ -257,8 +265,8 @@ function JobForm({initial, onSave, onClose}) {
   const [color, setColor] = useState((initial&&initial.color)||COLORS[0]);
   const [type,  setType]  = useState((initial&&initial.rateType)||'daily');
   const [rate,  setRate]  = useState((initial&&initial.rate!=null)?String(initial.rate):'');
-  const [startTime, setStartTime] = useState((initial&&initial.startTime)||'09:00');
-  const [endTime,   setEndTime]   = useState((initial&&initial.endTime)||'17:00');
+  const [startTime, setStartTime] = useState((initial&&initial.startTime)||'08:00');
+  const [endTime,   setEndTime]   = useState((initial&&initial.endTime)||'16:00');
 
   const submit = () => {
     if (!name.trim()) return alert('יש למלא שם משרה');
@@ -517,7 +525,7 @@ function CalendarView({year,month,shifts,jobs,onDayClick,onShiftClick,onRangeSel
 }
 
 // ── BulkShiftForm ────────────────────────────────────────────
-function BulkShiftForm({startDate,endDate,jobs,shifts,onSave,onDeleteRange,onClose}) {
+function BulkShiftForm({startDate,endDate,jobs,shifts,onSave,onDeleteRange,onMarkPaid,onClose}) {
   const [jobId,     setJobId]     = useState((jobs[0]&&jobs[0].id)||'');
   const [sDate,     setSDate]     = useState(startDate||todayS());
   const [eDate,     setEDate]     = useState(endDate||todayS());
@@ -590,6 +598,17 @@ function BulkShiftForm({startDate,endDate,jobs,shifts,onSave,onDeleteRange,onClo
         class="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg text-sm font-semibold hover:bg-gray-200 transition-colors">
         ביטול</button>
     </div>
+    ${onMarkPaid&&html`
+      <button onClick=${()=>{
+        const rangeSet=new Set(range);
+        const inRange=(shifts||[]).filter(s=>rangeSet.has(s.date));
+        if(inRange.length===0) return alert('אין משמרות קיימות בטווח זה לסימון');
+        if(!confirm('לסמן '+inRange.length+' משמרות בטווח כשולם?')) return;
+        onMarkPaid(new Set(inRange.map(s=>s.id)));
+        onClose();
+      }}
+        class="w-full border border-emerald-200 text-emerald-600 py-2 rounded-lg text-sm font-medium hover:bg-emerald-50 transition-colors">
+        💰 סמן משמרות בטווח כשולם</button>`}
     ${onDeleteRange&&html`
       <button onClick=${()=>{
         const rangeSet=new Set(range);
@@ -766,13 +785,19 @@ function ShiftsPage({shifts,setShifts,jobs}) {
     setShifts(s=>editing?s.map(x=>x.id===editing.id?{...x,...data}:x):[...s,{id:genId(),...data}]);
     setModal(null);
   };
+  // Remove shifts and also delete their Google Calendar events (if synced)
+  const removeShifts=idSet=>{
+    shifts.forEach(s=>{ if(idSet.has(s.id)&&s.gcalId) deleteGcalEvent(s.gcalId); });
+    setShifts(s=>s.filter(x=>!idSet.has(x.id)));
+  };
   const del=id=>{
     if(confirm('למחוק משמרת זו?')) {
-      setShifts(s=>s.filter(x=>x.id!==id));
+      removeShifts(new Set([id]));
       setDetailShift(null);
       setModal(null);
     }
   };
+  const markPaid=idSet=>setShifts(s=>s.map(x=>idSet.has(x.id)?{...x,isPaid:true}:x));
   const sorted=[...ms].sort((a,b)=>b.date<a.date?-1:b.date>a.date?1:0);
 
   return html`<div class="space-y-4">
@@ -841,7 +866,7 @@ function ShiftsPage({shifts,setShifts,jobs}) {
 
     ${deleteModal&&html`<${Modal} title="מחיקה מרובה לפי טווח תאריכים" onClose=${()=>setDeleteModal(false)}>
       <${BulkDeleteForm} shifts=${shifts}
-        onDelete=${ids=>setShifts(s=>s.filter(x=>!ids.has(x.id)))}
+        onDelete=${removeShifts}
         onClose=${()=>setDeleteModal(false)}/>
     <//>`}
 
@@ -850,7 +875,8 @@ function ShiftsPage({shifts,setShifts,jobs}) {
         startDate=${bulkModal.startDate} endDate=${bulkModal.endDate}
         jobs=${jobs} shifts=${shifts}
         onSave=${newShifts=>setShifts(s=>[...s,...newShifts])}
-        onDeleteRange=${ids=>setShifts(s=>s.filter(x=>!ids.has(x.id)))}
+        onDeleteRange=${removeShifts}
+        onMarkPaid=${markPaid}
         onClose=${()=>setBulkModal(null)}/>
     <//>`}
 
@@ -1241,8 +1267,8 @@ function GoogleCalendarSection({jobs,shifts,setShifts}) {
   const syncOne = async (s) => {
     const job=findJob(jobs,s.jobId);
     const title='עבודה'+(job?' – '+job.name:'');
-    const st=(job&&job.startTime)||'09:00';
-    const et=(job&&job.endTime)||'17:00';
+    const st=(job&&job.startTime)||'08:00';
+    const et=(job&&job.endTime)||'16:00';
     let endDate=s.date;
     if(et<=st){ const nd=new Date(s.date+'T12:00:00'); nd.setDate(nd.getDate()+1); endDate=nd.toISOString().slice(0,10); }
     const body={
@@ -1445,6 +1471,10 @@ function App() {
   const darkMode=!!(settings&&settings.darkMode);
   const toggleDark=()=>setSettings(s=>({...s,darkMode:!s.darkMode}));
 
+  const privacy=!!(settings&&settings.privacy);
+  _privacy=privacy;
+  const togglePrivacy=()=>setSettings(s=>({...s,privacy:!s.privacy}));
+
   useReminders(shifts,settings);
 
   useEffect(()=>{
@@ -1459,6 +1489,10 @@ function App() {
         <div class="flex items-center justify-between py-3">
           <div><div class="font-bold text-gray-800">מעקב משמרות</div><div class="text-xs text-gray-400">ניהול הכנסות לשכיר ישראלי</div></div>
           <div class="flex items-center gap-3">
+            <button onClick=${togglePrivacy}
+              class=${'text-lg rounded-lg px-2 py-1 transition-colors '+(privacy?'bg-blue-100':'hover:bg-gray-100')}
+              title=${privacy?'הצג סכומים':'הסתר סכומים (מצב פרטיות)'}>
+              ${privacy?'🙈':'👁️'}</button>
             <div class="flex items-center gap-1.5">
               <span class="text-xs text-gray-400">${darkMode?'☀️':'🌙'}</span>
               <button onClick=${toggleDark}
