@@ -757,8 +757,7 @@ function ShiftsPage({shifts,setShifts,jobs}) {
               class=${'px-3 py-1.5 text-xs font-medium transition-colors '+(view===v?'bg-blue-500 text-white':'text-gray-600 hover:bg-gray-50')}>
               ${l}</button>`)}
         </div>
-        <button onClick=${()=>setModal({prefillDate:null})} class="bg-blue-500 text-white px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-blue-600 transition-colors">+ משמרת</button>
-        <button onClick=${()=>setBulkModal({startDate:null,endDate:null})} class="bg-indigo-500 text-white px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-indigo-600 transition-colors">+ טווח</button>
+        <button onClick=${()=>setBulkModal({startDate:null,endDate:null})} class="bg-blue-500 text-white px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-blue-600 transition-colors">+ משמרת</button>
         <button onClick=${markMonthPaid} class="bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-emerald-600 transition-colors">✓ סמן חודש כשולם</button>
         <button onClick=${()=>setDeleteModal(true)} class="bg-red-500 text-white px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-red-600 transition-colors">🗑️ מחיקה מרובה</button>
       </div>
