@@ -512,7 +512,7 @@ function CalendarView({year,month,shifts,jobs,onDayClick,onShiftClick,onRangeSel
           <div class=${'text-xs font-semibold mb-0.5 '+(isT?'text-blue-600':'text-gray-500')}>${day}</div>
           ${ds2.slice(0,2).map(s=>{ const j=findJob(jobs,s.jobId); return html`
             <div key=${s.id} data-shift="1" onClick=${e=>{e.stopPropagation();onShiftClick(s);}}
-              class="text-[10px] px-1 py-0.5 rounded text-white truncate mb-0.5 hover:opacity-80"
+              class="text-[10px] px-1 py-0.5 rounded text-white break-words leading-tight mb-0.5 hover:opacity-80"
               style=${{backgroundColor:(j&&j.color)||'#9CA3AF'}}>${(j&&j.name)||'?'}</div>`;})}
           ${ds2.length>2&&html`<div class="text-[10px] text-gray-400">+${ds2.length-2}</div>`}
         </div>`;
@@ -928,16 +928,25 @@ function DashboardPage({shifts,jobs,settings}) {
   },[shifts,jobs,year,month,settings.creditPoints,today]);
 
   // ── Sharing ──
+  const [shareScope,setShareScope]=useState('month'); // 'month' | 'all'
+  const [shareJob,  setShareJob]  =useState('all');   // 'all' | jobId
+  const shareList=()=>{
+    let list = shareScope==='all' ? shifts.slice() : shifts.filter(s=>{const[y,m]=s.date.split('-').map(Number);return y===year&&m===month+1;});
+    if(shareJob!=='all') list=list.filter(s=>s.jobId===shareJob);
+    return list.sort((a,b)=>a.date<b.date?-1:1);
+  };
+  const sharePeriod=()=> shareScope==='all' ? 'מאז תחילת העבודה' : MONTHS[month]+' '+year;
   const shareText=()=>{
-    const names=Object.keys(d.byJob).map(jid=>{const j=findJob(jobs,jid);return j?j.name:null;}).filter(Boolean);
+    const list=shareList();
+    const names=[...new Set(list.map(s=>s.jobId))].map(id=>{const j=findJob(jobs,id);return j?j.name:null;}).filter(Boolean);
     const nameStr=names.length?names.join(', ')+' ':'';
-    return 'סיכום עבודה '+nameStr+'- '+MONTHS[month]+' '+year+'\nימי עבודה - '+d.ms.length;
+    return 'סיכום עבודה '+nameStr+'- '+sharePeriod()+'\nימי עבודה - '+list.length;
   };
   const shareWhatsApp=()=>{
     window.open('https://wa.me/?text='+encodeURIComponent(shareText()),'_blank');
   };
   const exportExcel=async()=>{
-    const rows=[...d.ms].sort((a,b)=>a.date<b.date?-1:1);
+    const rows=shareList();
     const head=['משרה','יום','תאריך'];
     let tbl='<table border="1"><tr>'+head.map(h=>'<th>'+h+'</th>').join('')+'</tr>';
     rows.forEach(s=>{
@@ -949,7 +958,7 @@ function DashboardPage({shifts,jobs,settings}) {
     tbl+='</table>';
     const content='<html><head><meta charset="utf-8"></head><body>'+tbl+'</body></html>';
     const blob=new Blob([content],{type:'application/vnd.ms-excel'});
-    const name='משמרות_'+MONTHS[month]+'_'+year+'.xls';
+    const name='משמרות_'+sharePeriod().replace(/\s/g,'_')+'.xls';
     const file=new File([blob],name,{type:blob.type});
     if(navigator.canShare&&navigator.canShare({files:[file]})){
       try{ await navigator.share({files:[file],title:'סיכום משמרות',text:shareText()}); return; }catch(e){ if(e.name==='AbortError') return; }
@@ -976,9 +985,27 @@ function DashboardPage({shifts,jobs,settings}) {
       <${StatCard} label="ממתין לתשלום"  value=${fmt(d.pend)}       sub="טרם שולם"                         color="orange" icon="⏳"/>
     </div>
 
-    ${d.ms.length>0&&html`
-      <div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm space-y-2">
-        <h3 class="text-sm font-semibold text-gray-700 mb-1">📲 שיתוף סיכום</h3>
+    ${shifts.length>0&&html`
+      <div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm space-y-3">
+        <h3 class="text-sm font-semibold text-gray-700">📲 שיתוף סיכום</h3>
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <span class="block text-xs text-gray-400 mb-1">תקופה</span>
+            <select value=${shareScope} onChange=${e=>setShareScope(e.target.value)}
+              class="w-full border border-gray-200 rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
+              <option value="month">${MONTHS[month]+' '+year}</option>
+              <option value="all">מאז שהתחלתי לעבוד</option>
+            </select>
+          </div>
+          <div>
+            <span class="block text-xs text-gray-400 mb-1">משרה</span>
+            <select value=${shareJob} onChange=${e=>setShareJob(e.target.value)}
+              class="w-full border border-gray-200 rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
+              <option value="all">כל המשרות</option>
+              ${jobs.map(j=>html`<option key=${j.id} value=${j.id}>${j.name}</option>`)}
+            </select>
+          </div>
+        </div>
         <button onClick=${shareWhatsApp} class="w-full text-sm bg-emerald-50 text-emerald-700 py-2.5 rounded-lg hover:bg-emerald-100 font-medium flex items-center justify-center gap-2">
           <span>💬</span> שתף בוואטסאפ
         </button>
@@ -1490,7 +1517,7 @@ function App() {
           <div><div class="font-bold text-gray-800">מעקב משמרות</div><div class="text-xs text-gray-400">ניהול הכנסות לשכיר ישראלי</div></div>
           <div class="flex items-center gap-3">
             <button onClick=${togglePrivacy}
-              class=${'text-lg rounded-lg px-2 py-1 transition-colors '+(privacy?'bg-blue-100':'hover:bg-gray-100')}
+              class=${'text-lg rounded-lg px-2 py-1 transition-colors '+(privacy?'bg-blue-50':'hover:bg-gray-100')}
               title=${privacy?'הצג סכומים':'הסתר סכומים (מצב פרטיות)'}>
               ${privacy?'🙈':'👁️'}</button>
             <div class="flex items-center gap-1.5">
