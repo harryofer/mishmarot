@@ -139,6 +139,13 @@ const todayS  = () => new Date().toISOString().slice(0,10);
 let _privacy = false;
 const fmt     = n  => _privacy ? '₪•••' : '₪' + Math.round(n).toLocaleString('he-IL');
 const mDays     = (y,m) => new Date(y,m+1,0).getDate();
+function hoursBetween(st,et){
+  if(!st||!et) return 0;
+  const [sh,sm]=st.split(':').map(Number), [eh,em]=et.split(':').map(Number);
+  let mins=(eh*60+em)-(sh*60+sm);
+  if(mins<=0) mins+=24*60; // overnight shift
+  return Math.round((mins/60)*100)/100;
+}
 function dateRange(a,b) {
   const s=a<b?a:b, e=a<b?b:a, out=[];
   const cur=new Date(s+'T12:00:00'), end=new Date(e+'T12:00:00');
@@ -267,11 +274,12 @@ function JobForm({initial, onSave, onClose}) {
   const [rate,  setRate]  = useState((initial&&initial.rate!=null)?String(initial.rate):'');
   const [startTime, setStartTime] = useState((initial&&initial.startTime)||'08:00');
   const [endTime,   setEndTime]   = useState((initial&&initial.endTime)||'16:00');
+  const [hoursMode, setHoursMode] = useState((initial&&initial.hoursMode)||'fixed');
 
   const submit = () => {
     if (!name.trim()) return alert('יש למלא שם משרה');
     if (!rate||+rate<=0) return alert('יש להזין תעריף תקין');
-    onSave({name:name.trim(),color,rateType:type,rate:+rate,startTime,endTime});
+    onSave({name:name.trim(),color,rateType:type,rate:+rate,startTime,endTime,hoursMode});
   };
   return html`<div class="space-y-4">
     <div>
@@ -301,7 +309,13 @@ function JobForm({initial, onSave, onClose}) {
         class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
     </div>
     <div>
-      <label class="block text-sm font-medium text-gray-700 mb-1">שעות עבודה (לסנכרון ליומן Google)</label>
+      <label class="block text-sm font-medium text-gray-700 mb-1">שעות עבודה</label>
+      <div class="flex gap-2 mb-2">
+        ${[['fixed','קבועות'],['variable','משתנות מיום ליום']].map(([v,l])=>html`
+          <button key=${v} onClick=${()=>setHoursMode(v)}
+            class=${'flex-1 py-2 rounded-lg text-sm font-medium transition-colors '+(hoursMode===v?'bg-blue-500 text-white':'bg-gray-100 text-gray-600 hover:bg-gray-200')}>
+            ${l}</button>`)}
+      </div>
       <div class="grid grid-cols-2 gap-3">
         <div>
           <span class="block text-xs text-gray-400 mb-1">משעה</span>
@@ -314,6 +328,7 @@ function JobForm({initial, onSave, onClose}) {
             class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
         </div>
       </div>
+      <p class="text-xs text-gray-400 mt-1">${hoursMode==='fixed'?'כל המשמרות ישתמשו בשעות אלה.':'אלה שעות ברירת המחדל — ניתן לשנות בכל משמרת בנפרד.'}</p>
     </div>
     <div class="flex gap-2 pt-1">
       <button onClick=${submit} class="flex-1 bg-blue-500 text-white py-2 rounded-lg text-sm font-semibold hover:bg-blue-600 transition-colors">שמור</button>
@@ -324,9 +339,11 @@ function JobForm({initial, onSave, onClose}) {
 
 // ── ShiftForm ────────────────────────────────────────────────
 function ShiftForm({initial, jobs, shifts, onSave, onClose, onDelete}) {
+  const jobInit = findJob(jobs,(initial&&initial.jobId)||(jobs[0]&&jobs[0].id));
   const [jobId,  setJobId]  = useState((initial&&initial.jobId)||(jobs[0]&&jobs[0].id)||'');
   const [date,   setDate]   = useState((initial&&initial.date)||todayS());
-  const [hours,  setHours]  = useState(initial&&initial.hours!=null?initial.hours:8);
+  const [startTime,setStartTime]=useState((initial&&initial.startTime)||(jobInit&&jobInit.startTime)||'08:00');
+  const [endTime,  setEndTime]  =useState((initial&&initial.endTime)  ||(jobInit&&jobInit.endTime)  ||'16:00');
   const [travel, setTravel] = useState(initial&&initial.travel!=null?initial.travel:0);
   const [bonus,  setBonus]  = useState(initial&&initial.bonus!=null?initial.bonus:0);
   const [isPaid, setIsPaid] = useState(initial&&initial.isPaid!=null?initial.isPaid:false);
@@ -334,13 +351,24 @@ function ShiftForm({initial, jobs, shifts, onSave, onClose, onDelete}) {
 
   const job        = findJob(jobs,jobId);
   const isMonthly  = job && job.rateType==='monthly';
-  const baseEarn   = isMonthly ? 0 : (job?(job.rateType==='daily'?job.rate:job.rate*(+hours||0)):0);
+  const variable   = job && job.hoursMode==='variable';
+
+  // When the selected job changes, reset hours to that job's defined hours
+  const firstRun=useRef(true);
+  useEffect(()=>{
+    if(firstRun.current){ firstRun.current=false; return; }
+    const j=findJob(jobs,jobId);
+    if(j){ setStartTime(j.startTime||'08:00'); setEndTime(j.endTime||'16:00'); }
+  },[jobId]);
+
+  const hours      = hoursBetween(startTime,endTime);
+  const baseEarn   = isMonthly ? 0 : (job?(job.rateType==='daily'?job.rate:job.rate*hours):0);
   const total      = baseEarn+(+travel||0)+(+bonus||0);
 
   const submit = () => {
     if (!jobId) return alert('יש לבחור משרה');
     if (!date)  return alert('יש לבחור תאריך');
-    onSave({jobId,date,hours:+hours||0,travel:+travel||0,bonus:+bonus||0,isPaid,notes,earnings:baseEarn});
+    onSave({jobId,date,hours,startTime,endTime,travel:+travel||0,bonus:+bonus||0,isPaid,notes,earnings:baseEarn});
   };
 
   if (!jobs.length) return html`<div class="text-center py-8 text-gray-400">
@@ -368,10 +396,19 @@ function ShiftForm({initial, jobs, shifts, onSave, onClose, onDelete}) {
       </div>`:html`
       <div>
         <label class="block text-sm font-medium text-gray-700 mb-1">
-          שעות עבודה ${job&&job.rateType==='daily'?html`<span class="text-gray-400 font-normal text-xs">(לתיעוד בלבד)</span>`:''}
+          שעות עבודה ${variable?html`<span class="text-blue-400 font-normal text-xs">(ניתן לעריכה ליום זה)</span>`:html`<span class="text-gray-400 font-normal text-xs">(קבוע למשרה)</span>`}
         </label>
-        <input type="number" step="0.5" min="0" value=${hours} onInput=${e=>setHours(e.target.value)}
-          class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
+        ${variable?html`
+          <div class="grid grid-cols-2 gap-3">
+            <div><span class="block text-xs text-gray-400 mb-1">משעה</span>
+              <input type="time" value=${startTime} onChange=${e=>setStartTime(e.target.value)}
+                class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/></div>
+            <div><span class="block text-xs text-gray-400 mb-1">עד שעה</span>
+              <input type="time" value=${endTime} onChange=${e=>setEndTime(e.target.value)}
+                class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/></div>
+          </div>`:html`
+          <div class="bg-slate-50 rounded-lg px-3 py-2 text-sm text-gray-600">${startTime}–${endTime}</div>`}
+        <div class="text-xs text-gray-400 mt-1">סה"כ ${hours} שעות עבודה</div>
       </div>`}
     <div class="grid grid-cols-2 gap-3">
       <div>
@@ -539,7 +576,7 @@ function BulkShiftForm({startDate,endDate,jobs,shifts,onSave,onDeleteRange,onMar
     if(toAdd.length===0) return alert('אין תאריכים חדשים להוסיף בטווח זה');
     const newShifts=toAdd.map(d=>{
       const earn=isMonthly?0:(job?(job.rateType==='daily'?job.rate:job.rate*(+hours||0)):0);
-      return {id:genId(),jobId,date:d,hours:+hours||0,travel:+travel||0,bonus:0,isPaid:false,notes:'',earnings:earn};
+      return {id:genId(),jobId,date:d,hours:+hours||0,startTime:(job&&job.startTime)||'08:00',endTime:(job&&job.endTime)||'16:00',travel:+travel||0,bonus:0,isPaid:false,notes:'',earnings:earn};
     });
     onSave(newShifts); onClose();
   };
@@ -1334,8 +1371,8 @@ function GoogleCalendarSection({jobs,shifts,setShifts}) {
   const syncOne = async (s) => {
     const job=findJob(jobs,s.jobId);
     const title='עבודה'+(job?' – '+job.name:'');
-    const st=(job&&job.startTime)||'08:00';
-    const et=(job&&job.endTime)||'16:00';
+    const st=s.startTime||(job&&job.startTime)||'08:00';
+    const et=s.endTime||(job&&job.endTime)||'16:00';
     let endDate=s.date;
     if(et<=st){ const nd=new Date(s.date+'T12:00:00'); nd.setDate(nd.getDate()+1); endDate=nd.toISOString().slice(0,10); }
     const body={
