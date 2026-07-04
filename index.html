@@ -830,6 +830,34 @@ function DashboardPage({shifts,jobs,settings}) {
     return {ms,past,fut,gA,gF,paid,pend,nA,nF,byJob,hrs,monthlyTotal};
   },[shifts,jobs,year,month,settings.creditPoints,today]);
 
+  // ── Sharing ──
+  const shareText=()=>{
+    const lines=[
+      '📅 סיכום עבודה — '+MONTHS[month]+' '+year,
+      '👷 ימי עבודה: '+d.ms.length
+    ];
+    Object.keys(d.byJob).forEach(jid=>{
+      const job=findJob(jobs,jid);
+      lines.push('• '+((job&&job.name)||'לא ידוע')+': '+d.byJob[jid].shifts+' ימים');
+    });
+    lines.push('💰 ברוטו: '+fmt(d.gA));
+    lines.push('✅ נטו משוער: '+fmt(d.nA.net));
+    return lines.join('\n');
+  };
+  const shareWhatsApp=()=>{
+    window.open('https://wa.me/?text='+encodeURIComponent(shareText()),'_blank');
+  };
+  const shareFile=async()=>{
+    const blob=new Blob([JSON.stringify({jobs,shifts,settings},null,2)],{type:'application/json'});
+    const file=new File([blob],'shifts_'+MONTHS[month]+'_'+year+'.json',{type:'application/json'});
+    if(navigator.canShare&&navigator.canShare({files:[file]})){
+      try{ await navigator.share({files:[file],title:'גיבוי משמרות',text:shareText()}); }catch(e){}
+    } else {
+      const a=document.createElement('a');
+      a.href=URL.createObjectURL(blob); a.download=file.name; a.click();
+    }
+  };
+
   return html`<div class="space-y-5">
     <div class="flex items-center justify-between flex-wrap gap-2">
       <h2 class="text-base font-bold text-gray-800">סיכום חודשי</h2>
@@ -848,6 +876,17 @@ function DashboardPage({shifts,jobs,settings}) {
       <${StatCard} label="שולם"           value=${fmt(d.paid)}       sub="סומן כשולם"                      color="purple" icon="✓"/>
       <${StatCard} label="ממתין לתשלום"  value=${fmt(d.pend)}       sub="טרם שולם"                         color="orange" icon="⏳"/>
     </div>
+
+    ${d.ms.length>0&&html`
+      <div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm space-y-2">
+        <h3 class="text-sm font-semibold text-gray-700 mb-1">📲 שיתוף סיכום</h3>
+        <button onClick=${shareWhatsApp} class="w-full text-sm bg-emerald-50 text-emerald-700 py-2.5 rounded-lg hover:bg-emerald-100 font-medium flex items-center justify-center gap-2">
+          <span>💬</span> שתף בוואטסאפ
+        </button>
+        <button onClick=${shareFile} class="w-full text-sm bg-blue-50 text-blue-700 py-2.5 rounded-lg hover:bg-blue-100 font-medium flex items-center justify-center gap-2">
+          <span>📎</span> שתף כקובץ
+        </button>
+      </div>`}
 
     ${d.fut.length>0&&html`
       <div class="bg-gradient-to-l from-violet-50 to-blue-50 border border-violet-100 rounded-xl p-4">
