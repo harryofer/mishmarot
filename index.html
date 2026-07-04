@@ -500,7 +500,7 @@ function CalendarView({year,month,shifts,jobs,onDayClick,onShiftClick,onRangeSel
 }
 
 // ── BulkShiftForm ────────────────────────────────────────────
-function BulkShiftForm({startDate,endDate,jobs,shifts,onSave,onClose}) {
+function BulkShiftForm({startDate,endDate,jobs,shifts,onSave,onDeleteRange,onClose}) {
   const [jobId,     setJobId]     = useState((jobs[0]&&jobs[0].id)||'');
   const [sDate,     setSDate]     = useState(startDate||todayS());
   const [eDate,     setEDate]     = useState(endDate||todayS());
@@ -573,6 +573,17 @@ function BulkShiftForm({startDate,endDate,jobs,shifts,onSave,onClose}) {
         class="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg text-sm font-semibold hover:bg-gray-200 transition-colors">
         ביטול</button>
     </div>
+    ${onDeleteRange&&html`
+      <button onClick=${()=>{
+        const rangeSet=new Set(range);
+        const inRange=(shifts||[]).filter(s=>rangeSet.has(s.date));
+        if(inRange.length===0) return alert('אין משמרות קיימות בטווח זה למחיקה');
+        if(!confirm('למחוק '+inRange.length+' משמרות קיימות בטווח שנבחר?')) return;
+        onDeleteRange(new Set(inRange.map(s=>s.id)));
+        onClose();
+      }}
+        class="w-full border border-red-200 text-red-500 py-2 rounded-lg text-sm font-medium hover:bg-red-50 transition-colors">
+        🗑️ מחק משמרות קיימות בטווח</button>`}
   </div>`;
 }
 
@@ -817,11 +828,12 @@ function ShiftsPage({shifts,setShifts,jobs}) {
         onClose=${()=>setDeleteModal(false)}/>
     <//>`}
 
-    ${bulkModal&&html`<${Modal} title="הוספת משמרות לטווח תאריכים" onClose=${()=>setBulkModal(null)}>
+    ${bulkModal&&html`<${Modal} title="משמרות לטווח תאריכים" onClose=${()=>setBulkModal(null)}>
       <${BulkShiftForm}
         startDate=${bulkModal.startDate} endDate=${bulkModal.endDate}
         jobs=${jobs} shifts=${shifts}
         onSave=${newShifts=>setShifts(s=>[...s,...newShifts])}
+        onDeleteRange=${ids=>setShifts(s=>s.filter(x=>!ids.has(x.id)))}
         onClose=${()=>setBulkModal(null)}/>
     <//>`}
 
@@ -873,31 +885,30 @@ function DashboardPage({shifts,jobs,settings}) {
   },[shifts,jobs,year,month,settings.creditPoints,today]);
 
   // ── Sharing ──
-  const shareText=()=>{
-    const lines=[
-      '📅 סיכום עבודה — '+MONTHS[month]+' '+year,
-      '👷 ימי עבודה: '+d.ms.length
-    ];
-    Object.keys(d.byJob).forEach(jid=>{
-      const job=findJob(jobs,jid);
-      lines.push('• '+((job&&job.name)||'לא ידוע')+': '+d.byJob[jid].shifts+' ימים');
-    });
-    lines.push('💰 ברוטו: '+fmt(d.gA));
-    lines.push('✅ נטו משוער: '+fmt(d.nA.net));
-    return lines.join('\n');
-  };
+  const shareText=()=>'סיכום עבודה במשרה - '+MONTHS[month]+' '+year+'\nימי עבודה - '+d.ms.length;
   const shareWhatsApp=()=>{
     window.open('https://wa.me/?text='+encodeURIComponent(shareText()),'_blank');
   };
-  const shareFile=async()=>{
-    const blob=new Blob([JSON.stringify({jobs,shifts,settings},null,2)],{type:'application/json'});
-    const file=new File([blob],'shifts_'+MONTHS[month]+'_'+year+'.json',{type:'application/json'});
+  const exportExcel=async()=>{
+    const rows=[...d.ms].sort((a,b)=>a.date<b.date?-1:1);
+    const head=['תאריך','יום','משרה','שעות','נסיעות','בונוס','סה"כ','שולם'];
+    let tbl='<table border="1"><tr>'+head.map(h=>'<th>'+h+'</th>').join('')+'</tr>';
+    rows.forEach(s=>{
+      const job=findJob(jobs,s.jobId);
+      const dow=new Date(s.date+'T12:00:00').toLocaleDateString('he-IL',{weekday:'long'});
+      const tot=s.earnings+(s.travel||0)+(s.bonus||0);
+      const cells=[s.date,dow,(job&&job.name)||'',s.hours||0,s.travel||0,s.bonus||0,Math.round(tot),s.isPaid?'כן':'לא'];
+      tbl+='<tr>'+cells.map(c=>'<td>'+c+'</td>').join('')+'</tr>';
+    });
+    tbl+='</table>';
+    const content='<html><head><meta charset="utf-8"></head><body>'+tbl+'</body></html>';
+    const blob=new Blob([content],{type:'application/vnd.ms-excel'});
+    const name='משמרות_'+MONTHS[month]+'_'+year+'.xls';
+    const file=new File([blob],name,{type:blob.type});
     if(navigator.canShare&&navigator.canShare({files:[file]})){
-      try{ await navigator.share({files:[file],title:'גיבוי משמרות',text:shareText()}); }catch(e){}
-    } else {
-      const a=document.createElement('a');
-      a.href=URL.createObjectURL(blob); a.download=file.name; a.click();
+      try{ await navigator.share({files:[file],title:'סיכום משמרות',text:shareText()}); return; }catch(e){ if(e.name==='AbortError') return; }
     }
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click();
   };
 
   return html`<div class="space-y-5">
@@ -925,8 +936,8 @@ function DashboardPage({shifts,jobs,settings}) {
         <button onClick=${shareWhatsApp} class="w-full text-sm bg-emerald-50 text-emerald-700 py-2.5 rounded-lg hover:bg-emerald-100 font-medium flex items-center justify-center gap-2">
           <span>💬</span> שתף בוואטסאפ
         </button>
-        <button onClick=${shareFile} class="w-full text-sm bg-blue-50 text-blue-700 py-2.5 rounded-lg hover:bg-blue-100 font-medium flex items-center justify-center gap-2">
-          <span>📎</span> שתף כקובץ
+        <button onClick=${exportExcel} class="w-full text-sm bg-blue-50 text-blue-700 py-2.5 rounded-lg hover:bg-blue-100 font-medium flex items-center justify-center gap-2">
+          <span>📊</span> שתף כטבלת אקסל
         </button>
       </div>`}
 
