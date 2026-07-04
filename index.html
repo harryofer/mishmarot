@@ -1082,7 +1082,7 @@ function GoogleDriveSection({settings,setSettings,jobs,shifts,setJobs,setShifts}
   const [busy,   setBusy]   = useState(false);
 
   const clientId = (settings&&settings.gClientId)||'';
-  const SCOPE    = 'https://www.googleapis.com/auth/drive.file';
+  const SCOPE    = 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/calendar.events';
   const FILE     = 'shifts_backup.json';
 
   const setTok = t => { _gToken=t; setToken(t); };
@@ -1202,6 +1202,66 @@ function GoogleDriveSection({settings,setSettings,jobs,shifts,setJobs,setShifts}
   </div>`;
 }
 
+// ── GoogleCalendarSection ────────────────────────────────────
+function GoogleCalendarSection({jobs,shifts,setShifts}) {
+  const [busy,  setBusy]  = useState(false);
+  const [status,setStatus]= useState('');
+  const [scope, setScope] = useState('month');
+
+  const syncOne = async (s) => {
+    const job=findJob(jobs,s.jobId);
+    const title='עבודה'+(job?' – '+job.name:'');
+    const nx=new Date(s.date+'T12:00:00'); nx.setDate(nx.getDate()+1);
+    const body={ summary:title, colorId:'11', start:{date:s.date}, end:{date:nx.toISOString().slice(0,10)} };
+    const base='https://www.googleapis.com/calendar/v3/calendars/primary/events';
+    if(s.gcalId){
+      const r=await fetch(base+'/'+s.gcalId,
+        {method:'PATCH',headers:{Authorization:'Bearer '+_gToken,'Content-Type':'application/json'},body:JSON.stringify(body)});
+      if(r.ok){ const j=await r.json(); return j.id; }
+    }
+    const r=await fetch(base,
+      {method:'POST',headers:{Authorization:'Bearer '+_gToken,'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const j=await r.json();
+    if(j.error) throw new Error(j.error.message||'שגיאה');
+    return j.id;
+  };
+
+  const sync = async () => {
+    if(!_gToken){ alert('התחבר תחילה ל-Google בכרטיס "גיבוי Google Drive" למעלה'); return; }
+    const now=new Date(), y=now.getFullYear(), m=now.getMonth();
+    let list = shifts;
+    if(scope==='month') list=shifts.filter(s=>{const[a,b]=s.date.split('-').map(Number);return a===y&&b===m+1;});
+    else if(scope==='future') list=shifts.filter(s=>s.date>=todayS());
+    if(list.length===0){ setStatus('אין משמרות לסנכרון בטווח הנבחר'); return; }
+    setBusy(true); setStatus('מסנכרן '+list.length+' משמרות...');
+    try{
+      const idMap={};
+      for(const s of list){ idMap[s.id]=await syncOne(s); }
+      setShifts(arr=>arr.map(x=>idMap[x.id]?{...x,gcalId:idMap[x.id]}:x));
+      setStatus('סונכרנו '+list.length+' משמרות ליומן ✓');
+    }catch(e){ setStatus('שגיאה: '+e.message+' (ודא שהפעלת Calendar API וחיברת מחדש)'); }
+    setBusy(false);
+  };
+
+  return html`<div class="space-y-3">
+    <p class="text-xs text-gray-500">ימי העבודה יתווספו ליומן Google כאירועי יום-שלם <span class="text-red-500 font-medium">אדומים</span> עם הכיתוב "עבודה" ושם המשרה.</p>
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-1">טווח לסנכרון</label>
+      <select value=${scope} onChange=${e=>setScope(e.target.value)}
+        class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
+        <option value="month">החודש הנוכחי</option>
+        <option value="future">מהיום והלאה</option>
+        <option value="all">כל המשמרות</option>
+      </select>
+    </div>
+    <button onClick=${sync} disabled=${busy}
+      class="w-full bg-red-500 text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-red-600 disabled:opacity-50 transition-colors">
+      ${busy?'...':'📅 סנכרן ליומן Google'}</button>
+    ${status&&html`<div class=${'text-xs text-center py-1.5 px-3 rounded-lg '+(status.includes('שגיאה')?'bg-red-50 text-red-600':'bg-blue-50 text-blue-700')}>
+      ${status}</div>`}
+  </div>`;
+}
+
 // ── SettingsPage ─────────────────────────────────────────────
 function SettingsPage({settings,setSettings,jobs,shifts,setJobs,setShifts}) {
   const exp=()=>{
@@ -1283,6 +1343,11 @@ function SettingsPage({settings,setSettings,jobs,shifts,setJobs,setShifts}) {
         settings=${settings} setSettings=${setSettings}
         jobs=${jobs} shifts=${shifts}
         setJobs=${setJobs} setShifts=${setShifts}/>
+    </div>
+    <div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+      <h3 class="text-sm font-semibold text-gray-700 mb-3">📅 סנכרון ליומן Google</h3>
+      <${GoogleCalendarSection}
+        jobs=${jobs} shifts=${shifts} setShifts=${setShifts}/>
     </div>
     <div class="text-center text-xs text-gray-400 py-2 leading-5">
       כל הנתונים שמורים ב-LocalStorage במכשיר זה בלבד.<br/>חישובי המס הם הערכות ואינם מהווים ייעוץ מקצועי.
