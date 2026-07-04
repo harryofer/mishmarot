@@ -257,11 +257,13 @@ function JobForm({initial, onSave, onClose}) {
   const [color, setColor] = useState((initial&&initial.color)||COLORS[0]);
   const [type,  setType]  = useState((initial&&initial.rateType)||'daily');
   const [rate,  setRate]  = useState((initial&&initial.rate!=null)?String(initial.rate):'');
+  const [startTime, setStartTime] = useState((initial&&initial.startTime)||'09:00');
+  const [endTime,   setEndTime]   = useState((initial&&initial.endTime)||'17:00');
 
   const submit = () => {
     if (!name.trim()) return alert('יש למלא שם משרה');
     if (!rate||+rate<=0) return alert('יש להזין תעריף תקין');
-    onSave({name:name.trim(),color,rateType:type,rate:+rate});
+    onSave({name:name.trim(),color,rateType:type,rate:+rate,startTime,endTime});
   };
   return html`<div class="space-y-4">
     <div>
@@ -289,6 +291,21 @@ function JobForm({initial, onSave, onClose}) {
       <label class="block text-sm font-medium text-gray-700 mb-1">${type==='daily'?'שכר יומי (₪)':type==='hourly'?'שכר שעתי (₪)':'שכר חודשי (₪)'}</label>
       <input type="number" value=${rate} onInput=${e=>setRate(e.target.value)} placeholder="0"
         class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
+    </div>
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-1">שעות עבודה (לסנכרון ליומן Google)</label>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <span class="block text-xs text-gray-400 mb-1">משעה</span>
+          <input type="time" value=${startTime} onChange=${e=>setStartTime(e.target.value)}
+            class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
+        </div>
+        <div>
+          <span class="block text-xs text-gray-400 mb-1">עד שעה</span>
+          <input type="time" value=${endTime} onChange=${e=>setEndTime(e.target.value)}
+            class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
+        </div>
+      </div>
     </div>
     <div class="flex gap-2 pt-1">
       <button onClick=${submit} class="flex-1 bg-blue-500 text-white py-2 rounded-lg text-sm font-semibold hover:bg-blue-600 transition-colors">שמור</button>
@@ -1224,8 +1241,16 @@ function GoogleCalendarSection({jobs,shifts,setShifts}) {
   const syncOne = async (s) => {
     const job=findJob(jobs,s.jobId);
     const title='עבודה'+(job?' – '+job.name:'');
-    const nx=new Date(s.date+'T12:00:00'); nx.setDate(nx.getDate()+1);
-    const body={ summary:title, colorId:'11', start:{date:s.date}, end:{date:nx.toISOString().slice(0,10)} };
+    const st=(job&&job.startTime)||'09:00';
+    const et=(job&&job.endTime)||'17:00';
+    let endDate=s.date;
+    if(et<=st){ const nd=new Date(s.date+'T12:00:00'); nd.setDate(nd.getDate()+1); endDate=nd.toISOString().slice(0,10); }
+    const body={
+      summary:title, colorId:'11',
+      start:{dateTime:s.date+'T'+st+':00', timeZone:'Asia/Jerusalem'},
+      end:{dateTime:endDate+'T'+et+':00', timeZone:'Asia/Jerusalem'},
+      reminders:{useDefault:false, overrides:[]}
+    };
     const base='https://www.googleapis.com/calendar/v3/calendars/primary/events';
     if(s.gcalId){
       const r=await fetch(base+'/'+s.gcalId,
@@ -1257,7 +1282,7 @@ function GoogleCalendarSection({jobs,shifts,setShifts}) {
   };
 
   return html`<div class="space-y-3">
-    <p class="text-xs text-gray-500">ימי העבודה יתווספו ליומן Google כאירועי יום-שלם <span class="text-red-500 font-medium">אדומים</span> עם הכיתוב "עבודה" ושם המשרה.</p>
+    <p class="text-xs text-gray-500">ימי העבודה יתווספו ליומן Google כאירועים <span class="text-red-500 font-medium">אדומים</span> בשעות שהגדרת למשרה, עם הכיתוב "עבודה" ושם המשרה — וללא התראות מהיומן.</p>
     <div>
       <label class="block text-sm font-medium text-gray-700 mb-1">טווח לסנכרון</label>
       <select value=${scope} onChange=${e=>setScope(e.target.value)}
