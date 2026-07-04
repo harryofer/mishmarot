@@ -147,6 +147,7 @@ function dateRange(a,b) {
 
 // Module-level Google token (survives tab switches, clears on page reload)
 let _gToken = null;
+let _gClient = null;
 
 // ── Tax (Israel 2025 estimate) ───────────────────────────────
 const BRACKETS  = [{l:7380,r:.10},{l:10620,r:.14},{l:17040,r:.20},{l:22440,r:.31},{l:46640,r:.35},{l:60130,r:.47},{l:1e9,r:.50}];
@@ -1085,12 +1086,12 @@ function GoogleDriveSection({settings,setSettings,jobs,shifts,setJobs,setShifts}
   const FILE     = 'shifts_backup.json';
 
   const setTok = t => { _gToken=t; setToken(t); };
+  const gReady = () => window.google&&window.google.accounts&&window.google.accounts.oauth2;
 
-  const connect = () => {
-    if (!clientId.trim()) return alert('יש להזין Google Client ID תחילה');
-    if (!window.google||!window.google.accounts||!window.google.accounts.oauth2)
-      return alert('ספריית Google טרם נטענה. נסה שוב בעוד שנייה.');
-    window.google.accounts.oauth2.initTokenClient({
+  const getClient = () => {
+    if (_gClient) return _gClient;
+    if (!gReady()) return null;
+    _gClient = window.google.accounts.oauth2.initTokenClient({
       client_id: clientId.trim(),
       scope: SCOPE,
       callback: r => {
@@ -1098,8 +1099,30 @@ function GoogleDriveSection({settings,setSettings,jobs,shifts,setJobs,setShifts}
         setTok(r.access_token);
         setStatus('מחובר ✓');
       }
-    }).requestAccessToken({prompt:'consent'});
+    });
+    return _gClient;
   };
+
+  const connect = () => {
+    if (!clientId.trim()) return alert('יש להזין Google Client ID תחילה');
+    if (!gReady()) return alert('ספריית Google טרם נטענה. נסה שוב בעוד שנייה.');
+    setSettings(s=>({...s,gConnected:true}));
+    const c=getClient(); if(c) c.requestAccessToken({prompt:'consent'});
+  };
+
+  // Silent re-connect on load if previously connected (keeps you "logged in")
+  useEffect(()=>{
+    if (_gToken) { setToken(_gToken); return; }
+    if (!settings||!settings.gConnected||!clientId.trim()) return;
+    let tries=0;
+    const iv=setInterval(()=>{
+      if (gReady()) {
+        clearInterval(iv);
+        const c=getClient(); if(c) c.requestAccessToken({prompt:''});
+      } else if(++tries>25) clearInterval(iv);
+    },300);
+    return ()=>clearInterval(iv);
+  },[]);
 
   const findFile = async () => {
     const q = encodeURIComponent("name='"+FILE+"' and trashed=false");
@@ -1160,7 +1183,7 @@ function GoogleDriveSection({settings,setSettings,jobs,shifts,setJobs,setShifts}
       <p class="text-xs text-gray-400 mt-1">נדרש: Google Cloud Project → APIs & Services → Credentials → OAuth 2.0 Client ID</p>
     </div>
     ${token
-      ? html`<button onClick=${()=>{setTok(null);setStatus('');}}
+      ? html`<button onClick=${()=>{setTok(null);setStatus('');setSettings(s=>({...s,gConnected:false}));}}
           class="w-full bg-gray-100 text-gray-700 py-2 rounded-lg text-sm font-medium hover:bg-gray-200">
           ✕ התנתק מ-Google</button>
         <div class="grid grid-cols-2 gap-2">
@@ -1195,6 +1218,17 @@ function SettingsPage({settings,setSettings,jobs,shifts,setJobs,setShifts}) {
   };
   const clr=()=>{ if(!confirm('למחוק את כל הנתונים?')) return; setJobs([]); setShifts([]); alert('הנתונים נמחקו.'); };
 
+  const [notifPerm,setNotifPerm]=useState(window.Notification?Notification.permission:'unsupported');
+  const n=(settings&&settings.notify)||{};
+  const setN=(k,v)=>setSettings(s=>({...s,notify:{on:false,before:true,paid:true,worked:true,...(s.notify||{}),[k]:v}}));
+  const reqNotif=async()=>{
+    if(!window.Notification){ alert('הדפדפן לא תומך בהתראות'); return; }
+    let p=Notification.permission;
+    if(p!=='granted'){ p=await Notification.requestPermission(); setNotifPerm(p); }
+    if(p==='granted'){ setN('on',true); try{new Notification('התראות הופעלו ✓');}catch(e){} }
+    else alert('לא ניתן אישור להתראות. יש לאשר בהגדרות הדפדפן.');
+  };
+
   return html`<div class="space-y-4">
     <h2 class="text-base font-bold text-gray-800">הגדרות</h2>
     <div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm space-y-3">
@@ -1210,6 +1244,32 @@ function SettingsPage({settings,setSettings,jobs,shifts,setJobs,setShifts}) {
       </div>
       <div class="text-xs text-gray-400 bg-slate-50 rounded-lg p-2">נקודת זיכוי = ₪${CVAL}/חודש = ₪${CVAL*12}/שנה</div>
     </div>
+
+    <div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm space-y-3">
+      <h3 class="text-sm font-semibold text-gray-700">🔔 התראות ותזכורות</h3>
+      ${notifPerm==='unsupported'
+        ? html`<div class="text-xs text-amber-700 bg-amber-50 rounded-lg p-2">הדפדפן במכשיר זה אינו תומך בהתראות.</div>`
+        : notifPerm!=='granted'
+          ? html`<button onClick=${reqNotif} class="w-full text-sm bg-blue-500 text-white py-2.5 rounded-lg hover:bg-blue-600 font-semibold">🔔 הפעל התראות</button>`
+          : html`
+            <label class="flex items-center justify-between cursor-pointer select-none">
+              <span class="text-sm font-medium text-gray-700">התראות פעילות</span>
+              <input type="checkbox" checked=${n.on!==false} onChange=${e=>setN('on',e.target.checked)} class="w-4 h-4 rounded"/>
+            </label>
+            ${n.on!==false&&html`
+              <div class="space-y-2 pr-1 border-r-2 border-gray-100">
+                ${[['before','📅 תזכורת יום לפני עבודה'],['paid','💰 תזכורת לסמן משמרות ששולמו'],['worked','✅ תזכורת לאשר שעבדת ביום מסומן']]
+                  .map(([k,l])=>html`
+                    <label key=${k} class="flex items-center justify-between cursor-pointer select-none pr-2">
+                      <span class="text-sm text-gray-600">${l}</span>
+                      <input type="checkbox" checked=${n[k]!==false} onChange=${e=>setN(k,e.target.checked)} class="w-4 h-4 rounded"/>
+                    </label>`)}
+              </div>`}`}
+      <div class="text-[11px] text-gray-400 bg-slate-50 rounded-lg p-2 leading-4">
+        ℹ️ ההתראות מופיעות כשהאפליקציה פתוחה או כשפותחים אותה. באייפון נדרש להוסיף את האתר למסך הבית תחילה.
+      </div>
+    </div>
+
     <div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm space-y-2">
       <h3 class="text-sm font-semibold text-gray-700 mb-2">גיבוי ושחזור מקומי</h3>
       <button onClick=${exp} class="w-full text-sm bg-blue-50 text-blue-700 py-2 rounded-lg hover:bg-blue-100 font-medium">📤 ייצא גיבוי (JSON)</button>
@@ -1230,6 +1290,48 @@ function SettingsPage({settings,setSettings,jobs,shifts,setJobs,setShifts}) {
   </div>`;
 }
 
+// ── Reminders (fire when app is open/foregrounded) ───────────
+function fireNote(title,body){
+  try{
+    if(window.Notification&&Notification.permission==='granted'){
+      new Notification(title,{body});
+      return true;
+    }
+  }catch(e){}
+  return false;
+}
+function useReminders(shifts,settings){
+  useEffect(()=>{
+    const n=(settings&&settings.notify)||{};
+    if(!n.on) return;
+    if(!window.Notification||Notification.permission!=='granted') return;
+    const run=()=>{
+      const today=todayS();
+      const dt=new Date(today+'T12:00:00'); dt.setDate(dt.getDate()+1);
+      const tmr=dt.toISOString().slice(0,10);
+      let log={}; try{log=JSON.parse(localStorage.getItem('sw_notified')||'{}');}catch(e){}
+      const mark=k=>{ log[k]=today; try{localStorage.setItem('sw_notified',JSON.stringify(log));}catch(e){} };
+      if(n.before!==false && log.before!==today){
+        const t=shifts.filter(s=>s.date===tmr);
+        if(t.length){ if(fireNote('תזכורת עבודה 📅','יש לך '+t.length+' משמרות מחר')) mark('before'); }
+      }
+      if(n.paid!==false && log.paid!==today){
+        const unpaid=shifts.filter(s=>s.date<today&&!s.isPaid);
+        if(unpaid.length){ if(fireNote('תזכורת תשלום 💰','יש '+unpaid.length+' משמרות שטרם סומנו כשולם')) mark('paid'); }
+      }
+      if(n.worked!==false && log.worked!==today){
+        const tod=shifts.filter(s=>s.date===today);
+        if(tod.length){ if(fireNote('אישור עבודה ✅','אל תשכח לסמן שעבדת היום ('+tod.length+' משמרות)')) mark('worked'); }
+      }
+    };
+    run();
+    const onVis=()=>{ if(document.visibilityState==='visible') run(); };
+    document.addEventListener('visibilitychange',onVis);
+    const iv=setInterval(run,30*60*1000);
+    return ()=>{ document.removeEventListener('visibilitychange',onVis); clearInterval(iv); };
+  },[shifts,settings]);
+}
+
 // ── App ──────────────────────────────────────────────────────
 function App() {
   const [jobs,    setJobs]    =useLS('sw_jobs',    []);
@@ -1239,6 +1341,8 @@ function App() {
 
   const darkMode=!!(settings&&settings.darkMode);
   const toggleDark=()=>setSettings(s=>({...s,darkMode:!s.darkMode}));
+
+  useReminders(shifts,settings);
 
   useEffect(()=>{
     document.body.className=darkMode?'bg-slate-50 dark min-h-screen':'bg-slate-50 min-h-screen';
