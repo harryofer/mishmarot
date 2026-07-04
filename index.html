@@ -819,7 +819,7 @@ function ShiftsPage({shifts,setShifts,jobs}) {
     ${view==='calendar'?html`
       <div class="bg-white rounded-xl border border-gray-100 p-3 shadow-sm">
         <${CalendarView} year=${year} month=${month} shifts=${ms} jobs=${jobs}
-          onDayClick=${ds=>setModal({prefillDate:ds})}
+          onDayClick=${ds=>{ const ex=shifts.find(s=>s.date===ds); setModal(ex||{prefillDate:ds}); }}
           onShiftClick=${s=>setModal(s)}
           onRangeSelect=${(s,e)=>setBulkModal({startDate:s,endDate:e})}/>
       </div>
