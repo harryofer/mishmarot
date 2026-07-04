@@ -885,19 +885,22 @@ function DashboardPage({shifts,jobs,settings}) {
   },[shifts,jobs,year,month,settings.creditPoints,today]);
 
   // ── Sharing ──
-  const shareText=()=>'סיכום עבודה במשרה - '+MONTHS[month]+' '+year+'\nימי עבודה - '+d.ms.length;
+  const shareText=()=>{
+    const names=Object.keys(d.byJob).map(jid=>{const j=findJob(jobs,jid);return j?j.name:null;}).filter(Boolean);
+    const nameStr=names.length?names.join(', ')+' ':'';
+    return 'סיכום עבודה '+nameStr+'- '+MONTHS[month]+' '+year+'\nימי עבודה - '+d.ms.length;
+  };
   const shareWhatsApp=()=>{
     window.open('https://wa.me/?text='+encodeURIComponent(shareText()),'_blank');
   };
   const exportExcel=async()=>{
     const rows=[...d.ms].sort((a,b)=>a.date<b.date?-1:1);
-    const head=['תאריך','יום','משרה','שעות','נסיעות','בונוס','סה"כ','שולם'];
+    const head=['משרה','יום','תאריך'];
     let tbl='<table border="1"><tr>'+head.map(h=>'<th>'+h+'</th>').join('')+'</tr>';
     rows.forEach(s=>{
       const job=findJob(jobs,s.jobId);
       const dow=new Date(s.date+'T12:00:00').toLocaleDateString('he-IL',{weekday:'long'});
-      const tot=s.earnings+(s.travel||0)+(s.bonus||0);
-      const cells=[s.date,dow,(job&&job.name)||'',s.hours||0,s.travel||0,s.bonus||0,Math.round(tot),s.isPaid?'כן':'לא'];
+      const cells=[(job&&job.name)||'',dow,s.date];
       tbl+='<tr>'+cells.map(c=>'<td>'+c+'</td>').join('')+'</tr>';
     });
     tbl+='</table>';
