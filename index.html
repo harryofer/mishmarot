@@ -181,12 +181,26 @@ function calcNI(g) {
   if (c<=NI_FL) return {ni:c*.004, he:c*.031};
   return {ni:NI_FL*.004+(c-NI_FL)*.07, he:NI_FL*.031+(c-NI_FL)*.05};
 }
-function calcAll(g,pts) {
+function calcAll(g,pts,pensionBase) {
   if (!g||g<=0) return {gross:0,incomeTax:0,ni:0,health:0,pension:0,total:0,net:0};
   pts = pts||2.25;
-  const incomeTax=calcTax(g,pts), {ni,he:health}=calcNI(g), pension=g*.06;
+  const pb = pensionBase==null ? g : pensionBase;
+  const incomeTax=calcTax(g,pts), {ni,he:health}=calcNI(g), pension=pb*.06;
   const total=incomeTax+ni+health+pension;
   return {gross:g,incomeTax,ni,health,pension,total,net:Math.max(0,g-total)};
+}
+// Pension in Israel typically starts only after 3 months of employment (then paid retroactively)
+function addMonths(dateStr,n){
+  const d=new Date(dateStr+'T12:00:00'); d.setMonth(d.getMonth()+n);
+  return d.toISOString().slice(0,10);
+}
+function pensionEligible(job,dateStr){
+  if(!job) return true;
+  const mode=job.pensionMode||'auto';
+  if(mode==='always') return true;
+  if(mode==='never') return false;
+  if(!job.startDate) return true;
+  return dateStr >= addMonths(job.startDate,3);
 }
 
 // ── useLS hook ───────────────────────────────────────────────
@@ -275,11 +289,15 @@ function JobForm({initial, onSave, onClose}) {
   const [startTime, setStartTime] = useState((initial&&initial.startTime)||'08:00');
   const [endTime,   setEndTime]   = useState((initial&&initial.endTime)||'16:00');
   const [hoursMode, setHoursMode] = useState((initial&&initial.hoursMode)||'fixed');
+  const [jobStart,  setJobStart]  = useState((initial&&initial.startDate)||todayS());
+  const [pensionMode,setPensionMode]=useState((initial&&initial.pensionMode)||'auto');
+
+  const pensionFrom = addMonths(jobStart||todayS(),3);
 
   const submit = () => {
     if (!name.trim()) return alert('יש למלא שם משרה');
     if (!rate||+rate<=0) return alert('יש להזין תעריף תקין');
-    onSave({name:name.trim(),color,rateType:type,rate:+rate,startTime,endTime,hoursMode});
+    onSave({name:name.trim(),color,rateType:type,rate:+rate,startTime,endTime,hoursMode,startDate:jobStart,pensionMode});
   };
   return html`<div class="space-y-4">
     <div>
@@ -329,6 +347,22 @@ function JobForm({initial, onSave, onClose}) {
         </div>
       </div>
       <p class="text-xs text-gray-400 mt-1">${hoursMode==='fixed'?'כל המשמרות ישתמשו בשעות אלה.':'אלה שעות ברירת המחדל — ניתן לשנות בכל משמרת בנפרד.'}</p>
+    </div>
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-1">תאריך תחילת עבודה במשרה זו</label>
+      <input type="date" value=${jobStart} onChange=${e=>setJobStart(e.target.value)}
+        class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
+      <p class="text-xs text-gray-400 mt-1">משמש לחישוב אוטומטי של תחילת ניכוי הפנסיה (לפי חוק — 3 חודשים).</p>
+    </div>
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-1">ניכוי פנסיה (6%)</label>
+      <div class="flex gap-2">
+        ${[['auto','אוטומטי (אחרי 3 חודשים)'],['always','תמיד'],['never','אף פעם']].map(([v,l])=>html`
+          <button key=${v} onClick=${()=>setPensionMode(v)}
+            class=${'flex-1 py-2 rounded-lg text-xs font-medium transition-colors '+(pensionMode===v?'bg-blue-500 text-white':'bg-gray-100 text-gray-600 hover:bg-gray-200')}>
+            ${l}</button>`)}
+      </div>
+      ${pensionMode==='auto'&&html`<p class="text-xs text-gray-400 mt-1">לפי תאריך ההתחלה, ניכוי הפנסיה יתחיל מ־${pensionFrom}.</p>`}
     </div>
     <div class="flex gap-2 pt-1">
       <button onClick=${submit} class="flex-1 bg-blue-500 text-white py-2 rounded-lg text-sm font-semibold hover:bg-blue-600 transition-colors">שמור</button>
@@ -995,7 +1029,19 @@ function DashboardPage({shifts,jobs,settings}) {
     const earn=arr=>arr.reduce((n,s)=>n+s.earnings+(s.travel||0)+(s.bonus||0),0);
     const gA=earn(past)+monthlyTotal, gF=earn(ms)+monthlyTotal;
     const paid=earn(past.filter(s=>s.isPaid)), pend=earn(past.filter(s=>!s.isPaid));
-    const nA=calcAll(gA,settings.creditPoints), nF=calcAll(gF,settings.creditPoints);
+
+    // Pension base: only shifts/months where the job is pension-eligible on that date (3-month rule, or manual override)
+    const pensionEarn=arr=>arr.reduce((n,s)=>{
+      const j=findJob(jobs,s.jobId);
+      return pensionEligible(j,s.date) ? n+s.earnings+(s.travel||0)+(s.bonus||0) : n;
+    },0);
+    const monthlyPensionTotal=Array.from(monthlyJobIds).reduce((n,jid)=>{
+      const j=findJob(jobs,jid);
+      return (j&&pensionEligible(j,today)) ? n+j.rate : n;
+    },0);
+    const pA=pensionEarn(past)+monthlyPensionTotal, pF=pensionEarn(ms)+monthlyPensionTotal;
+
+    const nA=calcAll(gA,settings.creditPoints,pA), nF=calcAll(gF,settings.creditPoints,pF);
     const byJob={};
     ms.forEach(s=>{
       const k=s.jobId; byJob[k]=byJob[k]||{shifts:0,earn:0};
@@ -1127,6 +1173,7 @@ function DashboardPage({shifts,jobs,settings}) {
             <span class="text-gray-700">סה"כ ניכויים</span><span class="text-red-600">${fmt(d.nA.total)}</span>
           </div>
         </div>
+        ${d.nA.pension===0&&html`<div class="text-[11px] text-blue-500 bg-blue-50 rounded-lg p-2 mt-2">ℹ️ טרם חלה חובת ניכוי פנסיה החודש (בדרך כלל מתחיל אחרי 3 חודשי עבודה).</div>`}
       </div>`}
 
     ${Object.keys(d.byJob).length>0&&html`
@@ -1162,21 +1209,27 @@ function DashboardPage({shifts,jobs,settings}) {
 }
 
 // ── CalcPage ─────────────────────────────────────────────────
-function CalcPage({shifts,settings,setSettings}) {
+function CalcPage({shifts,jobs,settings,setSettings}) {
   const now=new Date();
   const [year,setYear]=useState(now.getFullYear());
   const [month,setMonth]=useState(now.getMonth());
   const [manual,setManual]=useState(false);
   const [mg,setMg]=useState('');
 
-  const autoG=useMemo(()=>{
+  const monthShifts=useMemo(()=>{
     const t=todayS();
-    return shifts.filter(s=>{const[y,m]=s.date.split('-').map(Number);return y===year&&m===month+1&&s.date<=t;})
-      .reduce((n,s)=>n+s.earnings+(s.travel||0)+(s.bonus||0),0);
+    return shifts.filter(s=>{const[y,m]=s.date.split('-').map(Number);return y===year&&m===month+1&&s.date<=t;});
   },[shifts,year,month]);
 
+  const autoG=useMemo(()=>monthShifts.reduce((n,s)=>n+s.earnings+(s.travel||0)+(s.bonus||0),0),[monthShifts]);
+  const autoPensionBase=useMemo(()=>monthShifts.reduce((n,s)=>{
+    const j=findJob(jobs,s.jobId);
+    return pensionEligible(j,s.date) ? n+s.earnings+(s.travel||0)+(s.bonus||0) : n;
+  },0),[monthShifts,jobs]);
+
   const gross=manual?(+mg||0):autoG;
-  const res=useMemo(()=>calcAll(gross,settings.creditPoints),[gross,settings.creditPoints]);
+  const pensionBase=manual?gross:autoPensionBase;
+  const res=useMemo(()=>calcAll(gross,settings.creditPoints,pensionBase),[gross,pensionBase,settings.creditPoints]);
 
   return html`<div class="space-y-4">
     <h2 class="text-base font-bold text-gray-800">מחשבון שכר נטו (שכיר ישראלי)</h2>
@@ -1714,7 +1767,7 @@ function App() {
         ${tab==='dashboard'&&html`<${DashboardPage} shifts=${shifts} jobs=${jobs} settings=${settings}/>`}
         ${tab==='shifts'   &&html`<${ShiftsPage}    shifts=${shifts} setShifts=${setShifts} jobs=${jobs}/>`}
         ${tab==='jobs'     &&html`<${JobsPage}       jobs=${jobs}    setJobs=${setJobs}/>`}
-        ${tab==='calc'     &&html`<${CalcPage}       shifts=${shifts} settings=${settings} setSettings=${setSettings}/>`}
+        ${tab==='calc'     &&html`<${CalcPage}       shifts=${shifts} jobs=${jobs} settings=${settings} setSettings=${setSettings}/>`}
         ${tab==='settings' &&html`<${SettingsPage}   settings=${settings} setSettings=${setSettings} jobs=${jobs} shifts=${shifts} setJobs=${setJobs} setShifts=${setShifts}/>`}
       </div>
     </main>
