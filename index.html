@@ -371,7 +371,8 @@ function MonthStrip({year,month,onChange}) {
 // ── StatCard ─────────────────────────────────────────────────
 function StatCard({label,value,sub,color,icon}) {
   const cls={blue:'bg-blue-50 text-blue-700 border-blue-100',green:'bg-emerald-50 text-emerald-700 border-emerald-100',
-    purple:'bg-violet-50 text-violet-700 border-violet-100',orange:'bg-orange-50 text-orange-700 border-orange-100'};
+    purple:'bg-violet-50 text-violet-700 border-violet-100',orange:'bg-orange-50 text-orange-700 border-orange-100',
+    red:'bg-red-50 text-red-600 border-red-100'};
   return html`<div class=${'rounded-xl border p-4 '+(cls[color]||cls.blue)}>
     <div class="flex justify-between items-start mb-1">
       <span class="text-xs font-medium opacity-70">${label}</span>
@@ -905,14 +906,41 @@ function ShiftDetailModal({shift, jobs, onEdit, onDelete, onClose}) {
 }
 
 // ── JobsPage ─────────────────────────────────────────────────
-function JobsPage({jobs,setJobs}) {
+function JobsPage({jobs,setJobs,shifts,setShifts}) {
   const [modal,setModal]=useState(null);
+  const [applyModal,setApplyModal]=useState(null); // {job,oldJob} after editing a job that has shifts
   const editing = (modal&&modal!=='add') ? findJob(jobs,modal) : null;
   const save = data => {
-    setJobs(j=>editing?j.map(x=>x.id===editing.id?{...x,...data}:x):[...j,{id:genId(),...data}]);
+    if(editing){
+      const oldJob=editing, newJob={...editing,...data};
+      setJobs(j=>j.map(x=>x.id===editing.id?newJob:x));
+      if((shifts||[]).some(s=>s.jobId===editing.id)) setApplyModal({job:newJob,oldJob});
+    } else {
+      setJobs(j=>[...j,{id:genId(),...data}]);
+    }
     setModal(null);
   };
   const del = id => { if(confirm('למחוק משרה זו?')) setJobs(j=>j.filter(x=>x.id!==id)); };
+
+  // Apply the edited job's rate/hours/travel to existing shifts (all, or from a given date)
+  const applyToShifts = fromDate => {
+    const {job,oldJob}=applyModal;
+    setShifts(arr=>arr.map(s=>{
+      if(s.jobId!==job.id) return s;
+      if(fromDate && s.date<fromDate) return s;
+      const variable=job.hoursMode==='variable';
+      const st=variable?(s.startTime||job.startTime||'08:00'):(job.startTime||'08:00');
+      const et=variable?(s.endTime  ||job.endTime  ||'16:00'):(job.endTime  ||'16:00');
+      const hrs=hoursBetween(st,et);
+      const earn=job.rateType==='monthly'?0:(job.rateType==='daily'?job.rate:job.rate*hrs);
+      let travel=s.travel;
+      if((job.travelPerDay||0)!==(oldJob.travelPerDay||0)){
+        if(!travel || travel===(oldJob.travelPerDay||0)) travel=job.travelPerDay||0;
+      }
+      return {...s,startTime:st,endTime:et,hours:hrs,earnings:earn,travel};
+    }));
+    setApplyModal(null);
+  };
   return html`<div class="space-y-4">
     <div class="flex items-center justify-between">
       <h2 class="text-base font-bold text-gray-800">המשרות שלי</h2>
@@ -944,6 +972,35 @@ function JobsPage({jobs,setJobs}) {
     ${modal&&html`<${Modal} title=${modal==='add'?'הוסף משרה':'ערוך משרה'} onClose=${()=>setModal(null)}>
       <${JobForm} initial=${editing} onSave=${save} onClose=${()=>setModal(null)}/>
     <//>`}
+    ${applyModal&&html`<${Modal} title="עדכון משמרות קיימות" onClose=${()=>setApplyModal(null)}>
+      <${ApplyJobChanges} jobName=${applyModal.job.name} onApply=${applyToShifts} onSkip=${()=>setApplyModal(null)}/>
+    <//>`}
+  </div>`;
+}
+
+// ── ApplyJobChanges (scope picker after editing a job) ───────
+function ApplyJobChanges({jobName,onApply,onSkip}) {
+  const [customDate,setCustomDate]=useState(todayS());
+  return html`<div class="space-y-3">
+    <p class="text-sm text-gray-600">השינויים במשרה <strong>"${jobName}"</strong> נשמרו. האם לעדכן גם משמרות שכבר הוזנו (שכר, שעות ונסיעות)?</p>
+    <button onClick=${()=>onApply(null)}
+      class="w-full bg-blue-500 text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-blue-600 transition-colors">
+      עדכן את כל המשמרות</button>
+    <button onClick=${()=>onApply(todayS())}
+      class="w-full bg-blue-50 text-blue-700 py-2.5 rounded-lg text-sm font-semibold hover:bg-blue-100 transition-colors">
+      עדכן מהיום והלאה</button>
+    <div class="border border-gray-200 rounded-lg p-3 space-y-2">
+      <div class="text-xs font-medium text-gray-500">או עדכן החל מתאריך:</div>
+      <div class="flex gap-2">
+        <input type="date" value=${customDate} onChange=${e=>setCustomDate(e.target.value)}
+          class="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
+        <button onClick=${()=>customDate&&onApply(customDate)}
+          class="bg-blue-500 text-white px-4 rounded-lg text-sm font-semibold hover:bg-blue-600 transition-colors">החל</button>
+      </div>
+    </div>
+    <button onClick=${onSkip}
+      class="w-full bg-gray-100 text-gray-600 py-2.5 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors">
+      אל תעדכן — רק משמרות חדשות</button>
   </div>`;
 }
 
@@ -1031,8 +1088,8 @@ function ShiftsPage({shifts,setShifts,jobs}) {
         <div class="flex rounded-lg border border-gray-200 overflow-hidden">
           ${[['calendar','calendar','לוח'],['list','list','רשימה']].map(([v,ic,l])=>html`
             <button key=${v} onClick=${()=>setView(v)}
-              class=${'px-3 py-1.5 text-xs font-medium transition-colors flex items-center gap-1 '+(view===v?'bg-blue-500 text-white':'text-gray-600 hover:bg-gray-50')}>
-              <${Icon} name=${ic} size=${13}/> ${l}</button>`)}
+              class=${'px-3 py-1.5 text-xs font-medium transition-colors flex items-center gap-1 whitespace-nowrap flex-shrink-0 '+(view===v?'bg-blue-500 text-white':'text-gray-600 hover:bg-gray-50')}>
+              <${Icon} name=${ic} size=${13}/><span>${l}</span></button>`)}
         </div>
         <button onClick=${()=>setBulkModal({startDate:null,endDate:null})} class="bg-blue-500 text-white px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-blue-600 transition-colors">+ משמרת</button>
         <button onClick=${markMonthPaid} class="bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-emerald-600 transition-colors">✓ סמן חודש כשולם</button>
@@ -1240,8 +1297,8 @@ function DashboardPage({shifts,jobs,settings,payslips,setTab}) {
 
     <div class="grid grid-cols-3 gap-3">
       <${StatCard} label="ברוטו"      value=${fmt(d.gA)}        sub=${d.past.length+' משמרות'}       color="blue"   icon=${html`<${Icon} name="coins" size=${17}/>`}/>
-      <${StatCard} label="נטו משוער"  value=${fmt(d.nA.net)}    sub=${fmt(d.nA.total)+' ניכויים'}   color="green"  icon=${html`<${Icon} name="wallet" size=${17}/>`}/>
-      <${StatCard} label="שולם?"      value=${allPaid?'כן':'לא'} sub=${allPaid?'שולם':'טרם שולם'}  color=${allPaid?'purple':'orange'} icon=${html`<${Icon} name=${allPaid?'check':'clock'} size=${17}/>`}/>
+      <${StatCard} label="נטו משוער"  value=${fmt(d.nA.net)}    sub=${fmt(d.nA.total)+' ניכויים'}   color="purple" icon=${html`<${Icon} name="wallet" size=${17}/>`}/>
+      <${StatCard} label="שולם?"      value=${allPaid?'כן':'לא'} sub=${allPaid?'שולם':'טרם שולם'}  color=${allPaid?'green':'red'} icon=${html`<${Icon} name=${allPaid?'check':'clock'} size=${17}/>`}/>
     </div>
 
     <div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
@@ -2060,7 +2117,7 @@ function App() {
       <div class="fade">
         ${tab==='dashboard'&&html`<${DashboardPage} shifts=${shifts} jobs=${jobs} settings=${settings} payslips=${payslips} setTab=${setTab}/>`}
         ${tab==='shifts'   &&html`<${ShiftsPage}    shifts=${shifts} setShifts=${setShifts} jobs=${jobs}/>`}
-        ${tab==='jobs'     &&html`<${JobsPage}       jobs=${jobs}    setJobs=${setJobs}/>`}
+        ${tab==='jobs'     &&html`<${JobsPage}       jobs=${jobs}    setJobs=${setJobs} shifts=${shifts} setShifts=${setShifts}/>`}
         ${tab==='payslips' &&html`<${PayslipsPage}   payslips=${payslips} setPayslips=${setPayslips} setShifts=${setShifts} setTab=${setTab}/>`}
         ${tab==='settings' &&html`<${SettingsPage}   settings=${settings} setSettings=${setSettings} jobs=${jobs} shifts=${shifts} setJobs=${setJobs} setShifts=${setShifts} payslips=${payslips} setPayslips=${setPayslips}/>`}
       </div>
