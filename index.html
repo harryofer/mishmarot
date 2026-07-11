@@ -1118,6 +1118,8 @@ function DashboardPage({shifts,jobs,settings,payslips,setTab}) {
     return {ms,past,fut,gA,gF,paid,pend,travelTotal,nA,nF,byJob,hrs,monthlyTotal};
   },[shifts,jobs,year,month,settings.creditPoints,today]);
 
+  const allPaid = d.past.length>0 && d.past.every(s=>s.isPaid);
+
   // ── Sharing ──
   const [shareScope,setShareScope]=useState(()=>{const n=new Date();return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');}); // 'all' | 'YYYY-MM'
   const [shareJob,  setShareJob]  =useState('all');   // 'all' | jobId
@@ -1178,17 +1180,10 @@ function DashboardPage({shifts,jobs,settings,payslips,setTab}) {
         <span>כולל שכר חודשי קבוע: <strong>${fmt(d.monthlyTotal)}</strong></span>
       </div>`}
 
-    ${d.travelTotal>0&&html`
-      <div class="bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-2.5 text-sm text-emerald-700 flex items-center gap-2">
-        <span>🚗</span>
-        <span>כולל החזר נסיעות: <strong>${fmt(d.travelTotal)}</strong></span>
-      </div>`}
-
-    <div class="grid grid-cols-2 gap-3">
-      <${StatCard} label="ברוטו בפועל"   value=${fmt(d.gA)}         sub=${d.past.length+' משמרות'}         color="blue"   icon="💰"/>
-      <${StatCard} label="נטו משוער"      value=${fmt(d.nA.net)}     sub=${fmt(d.nA.total)+' ניכויים'}     color="green"  icon="✅"/>
-      <${StatCard} label="שולם"           value=${fmt(d.paid)}       sub="סומן כשולם"                      color="purple" icon="✓"/>
-      <${StatCard} label="ממתין לתשלום"  value=${fmt(d.pend)}       sub="טרם שולם"                         color="orange" icon="⏳"/>
+    <div class="grid grid-cols-3 gap-3">
+      <${StatCard} label="ברוטו"      value=${fmt(d.gA)}        sub=${d.past.length+' משמרות'}       color="blue"   icon="💰"/>
+      <${StatCard} label="נטו משוער"  value=${fmt(d.nA.net)}    sub=${fmt(d.nA.total)+' ניכויים'}   color="green"  icon="✅"/>
+      <${StatCard} label="שולם?"      value=${allPaid?'כן':'לא'} sub=${allPaid?'שולם':'טרם שולם'}  color=${allPaid?'purple':'orange'} icon=${allPaid?'✓':'⏳'}/>
     </div>
 
     <div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
@@ -1256,6 +1251,9 @@ function DashboardPage({shifts,jobs,settings,payslips,setTab}) {
           <div class="flex justify-between pt-2 border-t border-gray-100 font-semibold text-sm">
             <span class="text-gray-700">סה"כ ניכויים</span><span class="text-red-600">${fmt(d.nA.total)}</span>
           </div>
+          ${d.travelTotal>0&&html`<div class="flex justify-between text-xs text-gray-500 pt-1">
+            <span>🚗 מזה החזר נסיעות</span><span>${fmt(d.travelTotal)}</span>
+          </div>`}
         </div>
         ${d.nA.pension===0&&html`<div class="text-[11px] text-blue-500 bg-blue-50 rounded-lg p-2 mt-2">ℹ️ טרם חלה חובת ניכוי פנסיה החודש (בדרך כלל מתחיל אחרי 3 חודשי עבודה).</div>`}
       </div>`}
@@ -1594,7 +1592,7 @@ function GoogleCalendarSection({jobs,shifts,setShifts}) {
 }
 
 // ── PayslipsPage ─────────────────────────────────────────────
-function PayslipsPage({payslips,setPayslips,setTab}) {
+function PayslipsPage({payslips,setPayslips,setShifts,setTab}) {
   const [token, setToken] = useState(()=>_gToken);
   const [month, setMonth] = useState(()=>{const n=new Date();return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');});
   const [file,  setFile]  = useState(null);
@@ -1615,7 +1613,9 @@ function PayslipsPage({payslips,setPayslips,setTab}) {
       const meta={name:'תלוש_'+month+'_'+file.name, mimeType:file.type||'application/octet-stream'};
       const res=await uploadFileToDrive(file,meta);
       setPayslips(list=>[...list,{id:genId(),month,name:file.name,driveFileId:res.id,driveLink:res.webViewLink,uploadedAt:new Date().toISOString()}]);
-      setFile(null); setStatus('הועלה בהצלחה ✓');
+      // Uploading a payslip for a month marks that month's shifts as paid
+      setShifts&&setShifts(arr=>arr.map(s=>s.date.slice(0,7)===month?{...s,isPaid:true}:s));
+      setFile(null); setStatus('הועלה בהצלחה ✓ — משמרות החודש סומנו כשולם');
     }catch(e){ setStatus('שגיאה: '+e.message); }
     setBusy(false);
   };
@@ -1962,7 +1962,7 @@ function App() {
         ${tab==='dashboard'&&html`<${DashboardPage} shifts=${shifts} jobs=${jobs} settings=${settings} payslips=${payslips} setTab=${setTab}/>`}
         ${tab==='shifts'   &&html`<${ShiftsPage}    shifts=${shifts} setShifts=${setShifts} jobs=${jobs}/>`}
         ${tab==='jobs'     &&html`<${JobsPage}       jobs=${jobs}    setJobs=${setJobs}/>`}
-        ${tab==='payslips' &&html`<${PayslipsPage}   payslips=${payslips} setPayslips=${setPayslips} setTab=${setTab}/>`}
+        ${tab==='payslips' &&html`<${PayslipsPage}   payslips=${payslips} setPayslips=${setPayslips} setShifts=${setShifts} setTab=${setTab}/>`}
         ${tab==='settings' &&html`<${SettingsPage}   settings=${settings} setSettings=${setSettings} jobs=${jobs} shifts=${shifts} setJobs=${setJobs} setShifts=${setShifts} payslips=${payslips} setPayslips=${setPayslips}/>`}
       </div>
     </main>
