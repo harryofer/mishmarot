@@ -1984,14 +1984,10 @@ function App() {
               class=${'text-lg rounded-lg px-2 py-1 transition-colors '+(privacy?'bg-blue-50':'hover:bg-gray-100')}
               title=${privacy?'הצג סכומים':'הסתר סכומים (מצב פרטיות)'}>
               ${privacy?'🙈':'👁️'}</button>
-            <div class="flex items-center gap-1.5">
-              <span class="text-xs text-gray-400">${darkMode?'☀️':'🌙'}</span>
-              <button onClick=${toggleDark}
-                class=${'relative w-10 h-5 rounded-full transition-colors duration-300 focus:outline-none '+(darkMode?'bg-blue-500':'bg-gray-300')}
-                title=${darkMode?'עבור למצב בהיר':'עבור למצב כהה'}>
-                <span class=${'toggle-thumb absolute top-0.5 w-4 h-4 bg-white rounded-full shadow '+(darkMode?'right-0.5':'left-0.5')}/>
-              </button>
-            </div>
+            <button onClick=${toggleDark}
+              class=${'text-lg rounded-lg px-2 py-1 transition-colors '+(darkMode?'bg-blue-50':'hover:bg-gray-100')}
+              title=${darkMode?'עבור למצב בהיר':'עבור למצב כהה'}>
+              ${darkMode?'☀️':'🌙'}</button>
             <img src="./icon.jpg" alt="לוגו" class="w-9 h-9 rounded-lg object-cover shadow-sm"/>
           </div>
         </div>
