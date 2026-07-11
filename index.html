@@ -15,17 +15,17 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="משמרות">
   <meta name="theme-color" content="#3b82f6">
-  <link rel="icon" href="./icon.png">
-  <link rel="apple-touch-icon" href="./icon.png">
+  <link rel="icon" href="./icon.jpg">
+  <link rel="apple-touch-icon" href="./icon.jpg">
   <script>
   // PWA manifest (blob works in Chrome/Edge on HTTPS)
   (function(){
     try {
-      const iconUrl=new URL('icon.png', location.href).href;
+      const iconUrl=new URL('icon.jpg', location.href).href;
       const m={name:'מעקב משמרות',short_name:'משמרות',start_url:'./',
         display:'standalone',background_color:'#f8fafc',theme_color:'#3b82f6',lang:'he',dir:'rtl',
-        icons:[{src:iconUrl,sizes:'512x512',type:'image/png',purpose:'any'},
-               {src:iconUrl,sizes:'512x512',type:'image/png',purpose:'maskable'}]};
+        icons:[{src:iconUrl,sizes:'1024x1024',type:'image/jpeg',purpose:'any'},
+               {src:iconUrl,sizes:'1024x1024',type:'image/jpeg',purpose:'maskable'}]};
       const l=document.createElement('link');l.rel='manifest';
       l.href=URL.createObjectURL(new Blob([JSON.stringify(m)],{type:'application/manifest+json'}));
       document.head.appendChild(l);
