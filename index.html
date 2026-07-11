@@ -182,9 +182,9 @@ async function deleteDriveFile(id){
   }catch(e){}
 }
 
-// ── Tax (Israel 2025 estimate) ───────────────────────────────
+// ── Tax (Israel 2026 estimate) ───────────────────────────────
 const BRACKETS  = [{l:7380,r:.10},{l:10620,r:.14},{l:17040,r:.20},{l:22440,r:.31},{l:46640,r:.35},{l:60130,r:.47},{l:1e9,r:.50}];
-const CVAL=242, NI_FL=7522, NI_CL=47465;
+const CVAL=242, NI_FL=6970, NI_CL=49030;
 
 function calcTax(g, pts) {
   let tax=0, prev=0;
@@ -329,13 +329,14 @@ function JobForm({initial, onSave, onClose}) {
   const [hoursMode, setHoursMode] = useState((initial&&initial.hoursMode)||'fixed');
   const [jobStart,  setJobStart]  = useState((initial&&initial.startDate)||todayS());
   const [pensionMode,setPensionMode]=useState((initial&&initial.pensionMode)||'auto');
+  const [travelDay, setTravelDay] = useState((initial&&initial.travelPerDay!=null)?String(initial.travelPerDay):'');
 
   const pensionFrom = addMonths(jobStart||todayS(),3);
 
   const submit = () => {
     if (!name.trim()) return alert('יש למלא שם משרה');
     if (!rate||+rate<=0) return alert('יש להזין תעריף תקין');
-    onSave({name:name.trim(),color,rateType:type,rate:+rate,startTime,endTime,hoursMode,startDate:jobStart,pensionMode});
+    onSave({name:name.trim(),color,rateType:type,rate:+rate,startTime,endTime,hoursMode,startDate:jobStart,pensionMode,travelPerDay:+travelDay||0});
   };
   return html`<div class="space-y-4">
     <div>
@@ -402,6 +403,12 @@ function JobForm({initial, onSave, onClose}) {
       </div>
       ${pensionMode==='auto'&&html`<p class="text-xs text-gray-400 mt-1">לפי תאריך ההתחלה, ניכוי הפנסיה יתחיל מ־${pensionFrom}.</p>`}
     </div>
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-1">נסיעות ליום עבודה (₪)</label>
+      <input type="number" step="0.5" min="0" value=${travelDay} onInput=${e=>setTravelDay(e.target.value)} placeholder="0"
+        class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
+      <p class="text-xs text-gray-400 mt-1">יתווסף אוטומטית לכל משמרת (ניתן לשנות בכל משמרת). למשל 16.6 ₪ ליום.</p>
+    </div>
     <div class="flex gap-2 pt-1">
       <button onClick=${submit} class="flex-1 bg-blue-500 text-white py-2 rounded-lg text-sm font-semibold hover:bg-blue-600 transition-colors">שמור</button>
       <button onClick=${onClose} class="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg text-sm font-semibold hover:bg-gray-200 transition-colors">ביטול</button>
@@ -416,7 +423,7 @@ function ShiftForm({initial, jobs, shifts, onSave, onClose, onDelete}) {
   const [date,   setDate]   = useState((initial&&initial.date)||todayS());
   const [startTime,setStartTime]=useState((initial&&initial.startTime)||(jobInit&&jobInit.startTime)||'08:00');
   const [endTime,  setEndTime]  =useState((initial&&initial.endTime)  ||(jobInit&&jobInit.endTime)  ||'16:00');
-  const [travel, setTravel] = useState(initial&&initial.travel!=null?initial.travel:0);
+  const [travel, setTravel] = useState(initial&&initial.travel!=null?initial.travel:((jobInit&&jobInit.travelPerDay)||0));
   const [bonus,  setBonus]  = useState(initial&&initial.bonus!=null?initial.bonus:0);
   const [isPaid, setIsPaid] = useState(initial&&initial.isPaid!=null?initial.isPaid:false);
   const [arrived,setArrived]= useState(initial&&initial.arrived!=null?initial.arrived:false);
@@ -431,7 +438,7 @@ function ShiftForm({initial, jobs, shifts, onSave, onClose, onDelete}) {
   useEffect(()=>{
     if(firstRun.current){ firstRun.current=false; return; }
     const j=findJob(jobs,jobId);
-    if(j){ setStartTime(j.startTime||'08:00'); setEndTime(j.endTime||'16:00'); }
+    if(j){ setStartTime(j.startTime||'08:00'); setEndTime(j.endTime||'16:00'); setTravel(j.travelPerDay||0); }
   },[jobId]);
 
   const hours      = hoursBetween(startTime,endTime);
@@ -643,8 +650,14 @@ function BulkShiftForm({startDate,endDate,jobs,shifts,onSave,onDeleteRange,onMar
   const [sDate,     setSDate]     = useState(startDate||todayS());
   const [eDate,     setEDate]     = useState(endDate||todayS());
   const [hours,     setHours]     = useState(8);
-  const [travel,    setTravel]    = useState(0);
+  const [travel,    setTravel]    = useState((jobs[0]&&jobs[0].travelPerDay)||0);
   const [skipExist, setSkipExist] = useState(true);
+
+  const bFirst=useRef(true);
+  useEffect(()=>{
+    if(bFirst.current){ bFirst.current=false; return; }
+    const j=findJob(jobs,jobId); if(j) setTravel(j.travelPerDay||0);
+  },[jobId]);
 
   const job      = findJob(jobs,jobId);
   const isMonthly= job&&job.rateType==='monthly';
@@ -1351,7 +1364,7 @@ function CalcPage({shifts,jobs,settings,setSettings}) {
           <span class="text-gray-800">סה"כ ניכויים</span><span class="text-red-600 text-base">${fmt(res.total)}</span>
         </div>
         <div class="mt-3 bg-amber-50 border border-amber-100 rounded-lg p-3 text-xs text-amber-700">
-          ⚠️ הערכה בלבד לפי מדרגות 2025. אינו מחליף ייעוץ רואה חשבון. תקרת ב"ל: ₪${NI_CL.toLocaleString()}/חודש.
+          ⚠️ הערכה בלבד לפי מדרגות 2026. אינו מחליף ייעוץ רואה חשבון. תקרת ב"ל: ₪${NI_CL.toLocaleString()}/חודש.
         </div>
       </div>`:html`
       <div class="text-center py-12 text-gray-400 bg-white rounded-xl border border-gray-100">
