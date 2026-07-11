@@ -121,6 +121,15 @@ self.addEventListener('fetch',e=>{
     .dark ::-webkit-scrollbar-thumb { background:#475569; }
     /* Toggle switch animation */
     .toggle-thumb { transition: transform .2s; }
+
+    /* ── Unified polish ── */
+    body { font-family: 'Segoe UI', system-ui, -apple-system, 'Heebo', sans-serif; -webkit-font-smoothing: antialiased; }
+    button { -webkit-tap-highlight-color: transparent; }
+    .rounded-xl  { border-radius: .9rem !important; }
+    .rounded-2xl { border-radius: 1.1rem !important; }
+    .bg-white.shadow-sm { box-shadow: 0 1px 3px rgba(15,23,42,.06), 0 1px 2px rgba(15,23,42,.04); }
+    .dark .bg-white.shadow-sm { box-shadow: 0 1px 3px rgba(0,0,0,.4); }
+    button:active { transform: scale(.98); }
   </style>
 </head>
 <body class="bg-slate-50 min-h-screen">
@@ -248,6 +257,53 @@ function shiftTravel(s, jobs) {
   return (j&&j.travelPerDay)||0;
 }
 
+// ── Security helpers ─────────────────────────────────────────
+const escapeHtml = s => String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+// Only allow http(s) URLs in hrefs (blocks javascript:/data: injected via tampered backups)
+function safeUrl(u){ try{ const x=new URL(u); return (x.protocol==='https:'||x.protocol==='http:')?u:null; }catch(e){ return null; } }
+
+// ── Icons (inline SVG, stroke style) ─────────────────────────
+const IPATH={
+  dashboard:'M3 3h7v9H3zM14 3h7v5h-7zM14 12h7v9h-7zM3 16h7v5H3z',
+  calendar:'M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z',
+  briefcase:'M4 7h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2zM16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2',
+  receipt:'M4 3h16v18l-2.7-1.5L14.6 21l-2.6-1.5L9.4 21l-2.7-1.5L4 21zM8 8h8M8 12h8M8 16h5',
+  settings:'M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M2 14h4M10 8h4M18 16h4',
+  eye:'M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z',
+  eyeOff:'M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7zM4 4l16 16',
+  sun:'M12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4',
+  moon:'M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z',
+  plus:'M12 5v14M5 12h14',
+  trash:'M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6',
+  pencil:'M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z',
+  upload:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12',
+  download:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3',
+  cloud:'M17.5 19H9a7 7 0 1 1 6.7-9h1.8a4.5 4.5 0 1 1 0 9z',
+  bell:'M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0',
+  chat:'M21 11.5a8.5 8.5 0 0 1-8.5 8.5 8.4 8.4 0 0 1-3.7-.8L3 21l1.8-5.8A8.5 8.5 0 1 1 21 11.5z',
+  table:'M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM3 9h18M3 15h18M12 3v18',
+  coins:'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM15.5 9H10.8a2 2 0 0 0 0 4h2.4a2 2 0 0 1 0 4H8.5M12 6.5V9M12 17v2.5',
+  check:'M20 6L9 17l-5-5',
+  clock:'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 6v6l4 2',
+  car:'M5 11l1.6-4.3A2 2 0 0 1 8.5 5.4h7a2 2 0 0 1 1.9 1.3L19 11M5 11h14a2 2 0 0 1 2 2v4h-2.5M5 11a2 2 0 0 0-2 2v4h2.5M6 17a1.7 1.7 0 1 0 3.4 0 1.7 1.7 0 0 0-3.4 0zM14.6 17a1.7 1.7 0 1 0 3.4 0 1.7 1.7 0 0 0-3.4 0zM9.4 17h5.2',
+  calc:'M6 2h12a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zM8 6.5h8M8 11.5h.01M12 11.5h.01M16 11.5h.01M8 15h.01M12 15h.01M16 15h.01M8 18.5h.01M12 18.5h.01M16 18.5h.01',
+  file:'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M9 13h6M9 17h6',
+  folder:'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z',
+  external:'M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3',
+  login:'M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3',
+  x:'M18 6L6 18M6 6l12 12',
+  trend:'M23 6l-9.5 9.5-5-5L1 18M17 6h6v6',
+  lock:'M5 11h14a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2zM8 11V7a4 4 0 0 1 8 0v4',
+  list:'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01',
+  wallet:'M21 7H5a2 2 0 0 1 0-4h14v4M21 7v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5M16.5 13.5h.01',
+  share:'M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8M16 6l-4-4-4 4M12 2v13'
+};
+function Icon({name,size,class:cls}){
+  return html`<svg width=${size||16} height=${size||16} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"
+    class=${'inline-block flex-shrink-0 '+(cls||'')} style=${{verticalAlign:'-2px'}}><path d=${IPATH[name]||''}/></svg>`;
+}
+
 // ── Modal ────────────────────────────────────────────────────
 function Modal({title, onClose, children}) {
   useEffect(()=>{
@@ -366,7 +422,7 @@ function JobForm({initial, onSave, onClose}) {
       </div>
     </div>
     ${type==='monthly'&&html`<div class="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg p-2">
-      💡 משרה חודשית: השכר החודשי יחושב פעם אחת בחודש, ללא תלות במספר המשמרות.
+      משרה חודשית: השכר החודשי יחושב פעם אחת בחודש, ללא תלות במספר המשמרות.
     </div>`}
     <div>
       <label class="block text-sm font-medium text-gray-700 mb-1">${type==='daily'?'שכר יומי (₪)':type==='hourly'?'שכר שעתי (₪)':'שכר חודשי (₪)'}</label>
@@ -460,7 +516,7 @@ function ShiftForm({initial, jobs, shifts, onSave, onClose, onDelete}) {
   };
 
   if (!jobs.length) return html`<div class="text-center py-8 text-gray-400">
-    <div class="text-4xl mb-2">💼</div>
+    <div class="flex justify-center mb-2 text-gray-300"><${Icon} name="briefcase" size=${36}/></div>
     <p>אין משרות. הוסף משרה קודם בלשונית "משרות".</p>
     <button onClick=${onClose} class="mt-4 text-blue-500 underline text-sm">סגור</button>
   </div>`;
@@ -480,7 +536,7 @@ function ShiftForm({initial, jobs, shifts, onSave, onClose, onDelete}) {
     </div>
     ${isMonthly?html`
       <div class="bg-blue-50 border border-blue-100 rounded-lg p-3 text-sm text-blue-700">
-        💼 משרה חודשית — שכר חודשי: <strong>${fmt(job.rate)}</strong> (מחושב אוטומטית פעם בחודש)
+        <${Icon} name="briefcase" size=${14}/> משרה חודשית — שכר חודשי: <strong>${fmt(job.rate)}</strong> (מחושב אוטומטית פעם בחודש)
       </div>`:html`
       <div>
         <label class="block text-sm font-medium text-gray-700 mb-1">
@@ -535,7 +591,7 @@ function ShiftForm({initial, jobs, shifts, onSave, onClose, onDelete}) {
     ${onDelete&&html`
       <button onClick=${onDelete}
         class="w-full border border-red-200 text-red-500 py-2 rounded-lg text-sm font-medium hover:bg-red-50 transition-colors mt-1">
-        🗑️ מחק משמרת זו
+        <${Icon} name="trash" size=${14}/> מחק משמרת זו
       </button>`}
   </div>`;
 }
@@ -648,7 +704,7 @@ function CalendarView({year,month,shifts,jobs,onDayClick,onShiftClick,onRangeSel
     </div>
     ${selSet.size>0
       ? html`<div class="mt-2 text-xs text-blue-600 text-center">נבחרו ${selSet.size} ימים</div>`
-      : html`<div class="mt-2 text-[11px] text-gray-400 text-center">💡 לחיצה ארוכה (על יום או משמרת) + גרירה לבחירת טווח ימים</div>`}
+      : html`<div class="mt-2 text-[11px] text-gray-400 text-center">לחיצה ארוכה (על יום או משמרת) + גרירה לבחירת טווח ימים</div>`}
   </div>`;
 }
 
@@ -742,7 +798,7 @@ function BulkShiftForm({startDate,endDate,jobs,shifts,onSave,onDeleteRange,onMar
         onClose();
       }}
         class="w-full border border-emerald-200 text-emerald-600 py-2 rounded-lg text-sm font-medium hover:bg-emerald-50 transition-colors">
-        💰 סמן משמרות בטווח כשולם</button>`}
+        <${Icon} name="wallet" size=${14}/> סמן משמרות בטווח כשולם</button>`}
     ${onDeleteRange&&html`
       <button onClick=${()=>{
         const rangeSet=new Set(range);
@@ -753,7 +809,7 @@ function BulkShiftForm({startDate,endDate,jobs,shifts,onSave,onDeleteRange,onMar
         onClose();
       }}
         class="w-full border border-red-200 text-red-500 py-2 rounded-lg text-sm font-medium hover:bg-red-50 transition-colors">
-        🗑️ מחק משמרות קיימות בטווח</button>`}
+        <${Icon} name="trash" size=${14}/> מחק משמרות קיימות בטווח</button>`}
   </div>`;
 }
 
@@ -778,7 +834,7 @@ function BulkDeleteForm({shifts, onDelete, onClose}) {
 
   return html`<div class="space-y-4">
     <div class="bg-red-50 border border-red-100 rounded-lg p-3 text-sm text-red-600">
-      ⚠️ פעולה זו תמחק לצמיתות את כל המשמרות בטווח התאריכים שנבחר.
+      פעולה זו תמחק לצמיתות את כל המשמרות בטווח התאריכים שנבחר.
     </div>
     <div class="grid grid-cols-2 gap-3">
       <div>
@@ -798,7 +854,7 @@ function BulkDeleteForm({shifts, onDelete, onClose}) {
     <div class="flex gap-2 pt-1">
       <button onClick=${submit}
         class=${'flex-1 py-2 rounded-lg text-sm font-semibold transition-colors '+(toDelete.length>0?'bg-red-500 text-white hover:bg-red-600':'bg-gray-200 text-gray-400 cursor-not-allowed')}>
-        🗑️ מחק ${toDelete.length>0?toDelete.length+' משמרות':''}
+        <${Icon} name="trash" size=${14}/> מחק ${toDelete.length>0?toDelete.length+' משמרות':''}
       </button>
       <button onClick=${onClose}
         class="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg text-sm font-semibold hover:bg-gray-200 transition-colors">
@@ -835,14 +891,14 @@ function ShiftDetailModal({shift, jobs, onEdit, onDelete, onClose}) {
       </div>
     </div>
     <div class="flex gap-1.5 flex-wrap">
-      ${isFut&&html`<span class="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full">📅 משמרת עתידית</span>`}
+      ${isFut&&html`<span class="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full">משמרת עתידית</span>`}
       ${shift.isPaid&&html`<span class="text-xs bg-emerald-100 text-emerald-700 px-2 py-1 rounded-full">✓ שולם</span>`}
-      ${!shift.isPaid&&!isFut&&html`<span class="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded-full">⏳ ממתין לתשלום</span>`}
+      ${!shift.isPaid&&!isFut&&html`<span class="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded-full">ממתין לתשלום</span>`}
     </div>
     ${shift.notes&&html`<div class="text-sm text-gray-500 italic">"${shift.notes}"</div>`}
     <div class="flex gap-2 pt-1">
-      <button onClick=${onEdit}   class="flex-1 bg-blue-500 text-white py-2 rounded-lg text-sm font-semibold hover:bg-blue-600">✏️ ערוך</button>
-      <button onClick=${onDelete} class="flex-1 bg-red-500 text-white py-2 rounded-lg text-sm font-semibold hover:bg-red-600">🗑️ מחק</button>
+      <button onClick=${onEdit}   class="flex-1 bg-blue-500 text-white py-2 rounded-lg text-sm font-semibold hover:bg-blue-600 flex items-center justify-center gap-1.5"><${Icon} name="pencil" size=${14}/> ערוך</button>
+      <button onClick=${onDelete} class="flex-1 bg-red-500 text-white py-2 rounded-lg text-sm font-semibold hover:bg-red-600 flex items-center justify-center gap-1.5"><${Icon} name="trash" size=${14}/> מחק</button>
       <button onClick=${onClose}  class="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg text-sm font-semibold hover:bg-gray-200">סגור</button>
     </div>
   </div>`;
@@ -864,7 +920,7 @@ function JobsPage({jobs,setJobs}) {
     </div>
     ${jobs.length===0?html`
       <div class="text-center py-16 text-gray-400 bg-white rounded-xl border border-gray-100">
-        <div class="text-5xl mb-3">💼</div>
+        <div class="flex justify-center mb-3 text-gray-300"><${Icon} name="briefcase" size=${44}/></div>
         <div class="font-medium">אין משרות עדיין</div>
         <div class="text-sm mt-1">הוסף את המשרה הראשונה שלך</div>
       </div>`:html`
@@ -879,8 +935,8 @@ function JobsPage({jobs,setJobs}) {
               </div>
             </div>
             <div class="flex gap-1">
-              <button onClick=${()=>setModal(job.id)} class="p-1.5 rounded hover:bg-blue-50 text-gray-400 hover:text-blue-500">✏️</button>
-              <button onClick=${()=>del(job.id)}      class="p-1.5 rounded hover:bg-red-50  text-gray-400 hover:text-red-500">🗑️</button>
+              <button onClick=${()=>setModal(job.id)} class="p-1.5 rounded hover:bg-blue-50 text-gray-400 hover:text-blue-500"><${Icon} name="pencil" size=${15}/></button>
+              <button onClick=${()=>del(job.id)}      class="p-1.5 rounded hover:bg-red-50  text-gray-400 hover:text-red-500"><${Icon} name="trash" size=${15}/></button>
             </div>
           </div>
         </div>`)}
@@ -911,8 +967,8 @@ function DayModal({date,shifts,jobs,onEditShift,onDeleteShift,onAddShift,onToggl
                 </div>
               </div>
               <div class="flex gap-1 flex-shrink-0">
-                <button onClick=${()=>onEditShift(s)}    class="p-1.5 rounded hover:bg-blue-50 text-gray-400 hover:text-blue-500">✏️</button>
-                <button onClick=${()=>onDeleteShift(s.id)} class="p-1.5 rounded hover:bg-red-50  text-gray-400 hover:text-red-500">🗑️</button>
+                <button onClick=${()=>onEditShift(s)}    class="p-1.5 rounded hover:bg-blue-50 text-gray-400 hover:text-blue-500"><${Icon} name="pencil" size=${15}/></button>
+                <button onClick=${()=>onDeleteShift(s.id)} class="p-1.5 rounded hover:bg-red-50  text-gray-400 hover:text-red-500"><${Icon} name="trash" size=${15}/></button>
               </div>
             </div>
             <button onClick=${()=>onToggleArrived&&onToggleArrived(s)}
@@ -920,7 +976,7 @@ function DayModal({date,shifts,jobs,onEditShift,onDeleteShift,onAddShift,onToggl
               ${s.arrived?'✓ הגעת לעבודה — הקש לביטול':'סמן שהגעת לעבודה'}</button>
           </div>`;
         })}
-    <button onClick=${onAddShift} class="w-full bg-blue-500 text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-blue-600 transition-colors">➕ הוסף משמרת ליום זה</button>
+    <button onClick=${onAddShift} class="w-full bg-blue-500 text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-blue-600 transition-colors flex items-center justify-center gap-1.5"><${Icon} name="plus" size=${15}/> הוסף משמרת ליום זה</button>
     <div class="text-[11px] text-gray-400 text-center">טיפ: לחיצה ארוכה בלוח לבחירה מרובה של ימים</div>
   </div>`;
 }
@@ -973,14 +1029,14 @@ function ShiftsPage({shifts,setShifts,jobs}) {
     <div class="flex items-center justify-end flex-wrap gap-2">
       <div class="flex items-center gap-2">
         <div class="flex rounded-lg border border-gray-200 overflow-hidden">
-          ${[['calendar','📅 לוח'],['list','📋 רשימה']].map(([v,l])=>html`
+          ${[['calendar','calendar','לוח'],['list','list','רשימה']].map(([v,ic,l])=>html`
             <button key=${v} onClick=${()=>setView(v)}
-              class=${'px-3 py-1.5 text-xs font-medium transition-colors '+(view===v?'bg-blue-500 text-white':'text-gray-600 hover:bg-gray-50')}>
-              ${l}</button>`)}
+              class=${'px-3 py-1.5 text-xs font-medium transition-colors flex items-center gap-1 '+(view===v?'bg-blue-500 text-white':'text-gray-600 hover:bg-gray-50')}>
+              <${Icon} name=${ic} size=${13}/> ${l}</button>`)}
         </div>
         <button onClick=${()=>setBulkModal({startDate:null,endDate:null})} class="bg-blue-500 text-white px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-blue-600 transition-colors">+ משמרת</button>
         <button onClick=${markMonthPaid} class="bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-emerald-600 transition-colors">✓ סמן חודש כשולם</button>
-        <button onClick=${()=>setDeleteModal(true)} class="bg-red-500 text-white px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-red-600 transition-colors">🗑️ מחיקה מרובה</button>
+        <button onClick=${()=>setDeleteModal(true)} class="bg-red-500 text-white px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-red-600 transition-colors flex items-center gap-1"><${Icon} name="trash" size=${13}/> מחיקה מרובה</button>
       </div>
     </div>
     <${MonthStrip} year=${year} month=${month} onChange=${(y,m)=>{setYear(y);setMonth(m);}}/>
@@ -996,7 +1052,7 @@ function ShiftsPage({shifts,setShifts,jobs}) {
       <div class="space-y-2">
         ${ms.length===0?html`
           <div class="text-center py-14 text-gray-400 bg-white rounded-xl border border-gray-100">
-            <div class="text-4xl mb-2">📋</div>
+            <div class="flex justify-center mb-3 text-gray-300"><${Icon} name="list" size=${40}/></div>
             <div class="text-sm">אין משמרות בחודש זה</div>
           </div>`:
         sorted.map(s=>{
@@ -1026,8 +1082,8 @@ function ShiftsPage({shifts,setShifts,jobs}) {
               </div>
               <div class="flex items-center gap-1 flex-shrink-0">
                 <span class="font-bold text-emerald-600">${fmt(tot)}</span>
-                <button onClick=${()=>setModal(s)} class="p-1 rounded hover:bg-blue-50 text-gray-400 hover:text-blue-500 text-sm">✏️</button>
-                <button onClick=${()=>del(s.id)}   class="p-1 rounded hover:bg-red-50  text-gray-400 hover:text-red-500  text-sm">🗑️</button>
+                <button onClick=${()=>setModal(s)} class="p-1.5 rounded hover:bg-blue-50 text-gray-400 hover:text-blue-500"><${Icon} name="pencil" size=${15}/></button>
+                <button onClick=${()=>del(s.id)}   class="p-1.5 rounded hover:bg-red-50  text-gray-400 hover:text-red-500"><${Icon} name="trash" size=${15}/></button>
               </div>
             </div>
           </div>`;
@@ -1157,7 +1213,7 @@ function DashboardPage({shifts,jobs,settings,payslips,setTab}) {
       const job=findJob(jobs,s.jobId);
       const dow=new Date(s.date+'T12:00:00').toLocaleDateString('he-IL',{weekday:'long'});
       const cells=[(job&&job.name)||'',dow,s.date];
-      tbl+='<tr>'+cells.map(c=>'<td>'+c+'</td>').join('')+'</tr>';
+      tbl+='<tr>'+cells.map(c=>'<td>'+escapeHtml(c)+'</td>').join('')+'</tr>';
     });
     tbl+='</table>';
     const content='<html><head><meta charset="utf-8"></head><body>'+tbl+'</body></html>';
@@ -1178,32 +1234,32 @@ function DashboardPage({shifts,jobs,settings,payslips,setTab}) {
 
     ${d.monthlyTotal>0&&html`
       <div class="bg-blue-50 border border-blue-100 rounded-xl px-4 py-2.5 text-sm text-blue-700 flex items-center gap-2">
-        <span>💼</span>
+        <${Icon} name="briefcase" size=${16}/>
         <span>כולל שכר חודשי קבוע: <strong>${fmt(d.monthlyTotal)}</strong></span>
       </div>`}
 
     <div class="grid grid-cols-3 gap-3">
-      <${StatCard} label="ברוטו"      value=${fmt(d.gA)}        sub=${d.past.length+' משמרות'}       color="blue"   icon="💰"/>
-      <${StatCard} label="נטו משוער"  value=${fmt(d.nA.net)}    sub=${fmt(d.nA.total)+' ניכויים'}   color="green"  icon="✅"/>
-      <${StatCard} label="שולם?"      value=${allPaid?'כן':'לא'} sub=${allPaid?'שולם':'טרם שולם'}  color=${allPaid?'purple':'orange'} icon=${allPaid?'✓':'⏳'}/>
+      <${StatCard} label="ברוטו"      value=${fmt(d.gA)}        sub=${d.past.length+' משמרות'}       color="blue"   icon=${html`<${Icon} name="coins" size=${17}/>`}/>
+      <${StatCard} label="נטו משוער"  value=${fmt(d.nA.net)}    sub=${fmt(d.nA.total)+' ניכויים'}   color="green"  icon=${html`<${Icon} name="wallet" size=${17}/>`}/>
+      <${StatCard} label="שולם?"      value=${allPaid?'כן':'לא'} sub=${allPaid?'שולם':'טרם שולם'}  color=${allPaid?'purple':'orange'} icon=${html`<${Icon} name=${allPaid?'check':'clock'} size=${17}/>`}/>
     </div>
 
     <div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
       <div class="flex items-center justify-between mb-1">
-        <h3 class="text-sm font-semibold text-gray-700">🧾 תלוש שכר לחודש זה</h3>
+        <h3 class="text-sm font-semibold text-gray-700 flex items-center gap-1.5"><${Icon} name="receipt" size=${15}/> תלוש שכר לחודש זה</h3>
         <button onClick=${()=>setTab&&setTab('payslips')} class="text-xs text-blue-600 hover:underline">ניהול תלושים</button>
       </div>
       ${monthPayslips.length===0
         ? html`<div class="text-xs text-gray-400">לא צורף תלוש לחודש זה — ניתן לצרף בלשונית "תלושים".</div>`
-        : monthPayslips.map(p=>html`<a key=${p.id} href=${p.driveLink} target="_blank" rel="noopener"
+        : monthPayslips.map(p=>html`<a key=${p.id} href=${safeUrl(p.driveLink)||'#'} target="_blank" rel="noopener noreferrer"
             class="flex items-center gap-2 py-1.5 text-sm text-blue-700 hover:underline">
-            <span class="flex-shrink-0">📄</span><span class="flex-1 min-w-0 truncate">צפה בתלוש</span><span class="text-gray-300 flex-shrink-0">🔗</span>
+            <${Icon} name="file" size=${16}/><span class="flex-1 min-w-0 truncate">צפה בתלוש</span><${Icon} name="external" size=${14} class="text-gray-300"/>
           </a>`)}
     </div>
 
     ${shifts.length>0&&html`
       <div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm space-y-3">
-        <h3 class="text-sm font-semibold text-gray-700">📲 שיתוף סיכום</h3>
+        <h3 class="text-sm font-semibold text-gray-700 flex items-center gap-1.5"><${Icon} name="share" size=${15}/> שיתוף סיכום</h3>
         <div class="grid grid-cols-2 gap-2">
           <div>
             <span class="block text-xs text-gray-400 mb-1">תקופה</span>
@@ -1223,16 +1279,16 @@ function DashboardPage({shifts,jobs,settings,payslips,setTab}) {
           </div>
         </div>
         <button onClick=${shareWhatsApp} class="w-full text-sm bg-emerald-50 text-emerald-700 py-2.5 rounded-lg hover:bg-emerald-100 font-medium flex items-center justify-center gap-2">
-          <span>💬</span> שתף בוואטסאפ
+          <${Icon} name="chat" size=${15}/> שתף בוואטסאפ
         </button>
         <button onClick=${exportExcel} class="w-full text-sm bg-blue-50 text-blue-700 py-2.5 rounded-lg hover:bg-blue-100 font-medium flex items-center justify-center gap-2">
-          <span>📊</span> שתף כטבלת אקסל
+          <${Icon} name="table" size=${15}/> שתף כטבלת אקסל
         </button>
       </div>`}
 
     ${d.fut.length>0&&html`
       <div class="bg-gradient-to-l from-violet-50 to-blue-50 border border-violet-100 rounded-xl p-4">
-        <div class="text-xs font-semibold text-violet-700 mb-2">📈 תחזית (כולל ${d.fut.length} משמרות עתידיות)</div>
+        <div class="text-xs font-semibold text-violet-700 mb-2 flex items-center gap-1.5"><${Icon} name="trend" size=${14}/> תחזית (כולל ${d.fut.length} משמרות עתידיות)</div>
         <div class="grid grid-cols-3 gap-3 text-center">
           ${[['ברוטו צפוי',fmt(d.gF),'text-gray-700'],['נטו צפוי',fmt(d.nF.net),'text-emerald-600'],['שעות',String(d.hrs),'text-violet-600']]
             .map(([l,v,c])=>html`<div key=${l}><div class="text-xs text-gray-500 mb-0.5">${l}</div><div class=${'text-lg font-bold '+c}>${v}</div></div>`)}
@@ -1259,11 +1315,11 @@ function DashboardPage({shifts,jobs,settings,payslips,setTab}) {
             <h3 class="text-sm font-semibold text-emerald-700 mb-2">תוספות</h3>
             <div class="flex items-center gap-2">
               <div class="w-2.5 h-2.5 rounded-full flex-shrink-0" style=${{backgroundColor:'#10B981'}}/>
-              <span class="text-xs text-gray-600 flex-1">🚗 החזר נסיעות</span>
+              <span class="text-xs text-gray-600 flex-1 flex items-center gap-1"><${Icon} name="car" size=${13}/> החזר נסיעות</span>
               <span class="text-xs font-semibold text-emerald-600">+${fmt(d.travelTotal)}</span>
             </div>
           </div>`}
-        ${d.nA.pension===0&&html`<div class="text-[11px] text-blue-500 bg-blue-50 rounded-lg p-2 mt-2">ℹ️ טרם חלה חובת ניכוי פנסיה החודש (בדרך כלל מתחיל אחרי 3 חודשי עבודה).</div>`}
+        ${d.nA.pension===0&&html`<div class="text-[11px] text-blue-500 bg-blue-50 rounded-lg p-2 mt-2">טרם חלה חובת ניכוי פנסיה החודש (בדרך כלל מתחיל אחרי 3 חודשי עבודה).</div>`}
       </div>`}
 
     ${Object.keys(d.byJob).length>0&&html`
@@ -1291,7 +1347,7 @@ function DashboardPage({shifts,jobs,settings,payslips,setTab}) {
 
     ${d.ms.length===0&&html`
       <div class="text-center py-14 text-gray-400 bg-white rounded-xl border border-gray-100">
-        <div class="text-5xl mb-2">📊</div>
+        <div class="flex justify-center mb-3 text-gray-300"><${Icon} name="dashboard" size=${44}/></div>
         <div class="font-medium">אין נתונים לחודש זה</div>
         <div class="text-sm mt-1">הוסף משמרות בלשונית "משמרות"</div>
       </div>`}
@@ -1381,11 +1437,11 @@ function CalcPage({shifts,jobs,settings,setSettings}) {
           <span class="text-gray-800">סה"כ ניכויים</span><span class="text-red-600 text-base">${fmt(res.total)}</span>
         </div>
         <div class="mt-3 bg-amber-50 border border-amber-100 rounded-lg p-3 text-xs text-amber-700">
-          ⚠️ הערכה בלבד לפי מדרגות 2026. אינו מחליף ייעוץ רואה חשבון. תקרת ב"ל: ₪${NI_CL.toLocaleString()}/חודש.
+          הערכה בלבד לפי מדרגות 2026. אינו מחליף ייעוץ רואה חשבון. תקרת ב"ל: ₪${NI_CL.toLocaleString()}/חודש.
         </div>
       </div>`:html`
       <div class="text-center py-12 text-gray-400 bg-white rounded-xl border border-gray-100">
-        <div class="text-4xl mb-2">🧮</div><div class="text-sm">הזן ברוטו חודשי לחישוב</div>
+        <div class="flex justify-center mb-2 text-gray-300"><${Icon} name="calc" size=${36}/></div><div class="text-sm">הזן ברוטו חודשי לחישוב</div>
       </div>`}
   </div>`;
 }
@@ -1487,11 +1543,11 @@ function GoogleDriveSection({settings,setSettings,jobs,shifts,payslips,setJobs,s
       const r = await fetch('https://www.googleapis.com/drive/v3/files/'+id+'?alt=media',
         {headers:{Authorization:'Bearer '+token}});
       const d = await r.json();
-      if (d.jobs)    setJobs(d.jobs);
-      if (d.shifts)  setShifts(d.shifts);
-      if (d.payslips)setPayslips(d.payslips);
-      if (d.settings){
-        const {darkMode,gClientId,...rest}=d.settings;
+      if (Array.isArray(d.jobs))    setJobs(d.jobs.filter(j=>j&&typeof j==='object'));
+      if (Array.isArray(d.shifts))  setShifts(d.shifts.filter(s=>s&&typeof s==='object'&&typeof s.date==='string'));
+      if (Array.isArray(d.payslips))setPayslips(d.payslips.filter(p=>p&&typeof p==='object'&&safeUrl(p.driveLink)));
+      if (d.settings&&typeof d.settings==='object'){
+        const {darkMode,gClientId,gConnected,...rest}=d.settings;
         setSettings(s=>({...s,...rest}));
       }
       setStatus('שוחזר בהצלחה ✓');
@@ -1510,14 +1566,14 @@ function GoogleDriveSection({settings,setSettings,jobs,shifts,payslips,setJobs,s
     ${token
       ? html`<button onClick=${()=>{setTok(null);setStatus('');setSettings(s=>({...s,gConnected:false}));}}
           class="w-full bg-gray-100 text-gray-700 py-2 rounded-lg text-sm font-medium hover:bg-gray-200">
-          ✕ התנתק מ-Google</button>
+          <${Icon} name="x" size=${13}/> התנתק מ-Google</button>
         <div class="grid grid-cols-2 gap-2">
           <button onClick=${backup} disabled=${busy}
             class="bg-emerald-500 text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-emerald-600 disabled:opacity-50 transition-colors">
-            ${busy?'...':'☁️ גבה ל-Drive'}</button>
+            ${busy?'...':html`<${Icon} name="cloud" size=${14}/> גבה ל-Drive`}</button>
           <button onClick=${restore} disabled=${busy}
             class="bg-violet-500 text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-violet-600 disabled:opacity-50 transition-colors">
-            ${busy?'...':'⬇️ שחזר מ-Drive'}</button>
+            ${busy?'...':html`<${Icon} name="download" size=${14}/> שחזר מ-Drive`}</button>
         </div>
         <label class="flex items-center justify-between cursor-pointer select-none pt-1">
           <span class="text-sm text-gray-700">גיבוי אוטומטי בכל שינוי</span>
@@ -1525,7 +1581,7 @@ function GoogleDriveSection({settings,setSettings,jobs,shifts,payslips,setJobs,s
         </label>`
       : html`<button onClick=${connect}
           class="w-full bg-blue-500 text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-blue-600 transition-colors">
-          🔑 חבר חשבון Google</button>`}
+          <${Icon} name="login" size=${14}/> חבר חשבון Google</button>`}
     ${status&&html`<div class=${'text-xs text-center py-1.5 px-3 rounded-lg '+(status.includes('שגיאה')?'bg-red-50 text-red-600':'bg-blue-50 text-blue-700')}>
       ${status}</div>`}
   </div>`;
@@ -1593,7 +1649,7 @@ function GoogleCalendarSection({jobs,shifts,setShifts}) {
     </div>
     <button onClick=${sync} disabled=${busy}
       class="w-full bg-red-500 text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-red-600 disabled:opacity-50 transition-colors">
-      ${busy?'...':'📅 סנכרן ליומן Google'}</button>
+      ${busy?'...':html`<${Icon} name="calendar" size=${14}/> סנכרן ליומן Google`}</button>
     ${status&&html`<div class=${'text-xs text-center py-1.5 px-3 rounded-lg '+(status.includes('שגיאה')?'bg-red-50 text-red-600':'bg-blue-50 text-blue-700')}>
       ${status}</div>`}
   </div>`;
@@ -1651,7 +1707,7 @@ function PayslipsPage({payslips,setPayslips,setShifts,setTab}) {
     <div class="bg-gradient-to-l from-blue-600 to-indigo-600 rounded-2xl p-5 text-white shadow-md">
       <div class="flex items-center justify-between">
         <div class="min-w-0">
-          <div class="text-lg font-extrabold flex items-center gap-2">🧾 תלושי שכר</div>
+          <div class="text-lg font-extrabold flex items-center gap-2"><${Icon} name="receipt" size=${20}/> תלושי שכר</div>
           <div class="text-xs text-blue-100 mt-1 leading-4">כל התלושים שלך במקום אחד,<br/>מגובים אוטומטית ב-Google Drive</div>
         </div>
         <div class="text-center flex-shrink-0 bg-white/15 rounded-2xl px-4 py-2">
@@ -1663,13 +1719,13 @@ function PayslipsPage({payslips,setPayslips,setShifts,setTab}) {
 
     ${!token?html`
       <div class="bg-amber-50 border border-amber-100 rounded-2xl p-5 text-sm text-amber-700 text-center space-y-3">
-        <div class="text-4xl">🔒</div>
+        <div class="flex justify-center text-amber-400"><${Icon} name="lock" size=${36}/></div>
         <div>כדי לצרף ולשמור תלושים צריך להתחבר לחשבון Google.</div>
-        <button onClick=${()=>setTab('settings')} class="bg-blue-500 text-white px-5 py-2.5 rounded-xl text-sm font-semibold hover:bg-blue-600 transition-colors">🔑 עבור להגדרות והתחבר</button>
+        <button onClick=${()=>setTab('settings')} class="bg-blue-500 text-white px-5 py-2.5 rounded-xl text-sm font-semibold hover:bg-blue-600 transition-colors"><${Icon} name="login" size=${14}/> עבור להגדרות והתחבר</button>
       </div>`:html`
       <!-- Add payslip card -->
       <div class="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm space-y-3">
-        <h3 class="text-sm font-bold text-gray-700 flex items-center gap-2"><span>➕</span> הוסף תלוש חדש</h3>
+        <h3 class="text-sm font-bold text-gray-700 flex items-center gap-2"><${Icon} name="plus" size=${15}/> הוסף תלוש חדש</h3>
         <div>
           <label class="block text-xs font-medium text-gray-500 mb-1">חודש התלוש</label>
           <div class="grid grid-cols-2 gap-2">
@@ -1684,20 +1740,20 @@ function PayslipsPage({payslips,setPayslips,setShifts,setTab}) {
           </div>
         </div>
         <label class="block border-2 border-dashed border-gray-200 rounded-xl p-5 text-center cursor-pointer hover:border-blue-300 hover:bg-blue-50 transition-colors">
-          <div class="text-3xl mb-1">${file?'✅':'📎'}</div>
+          <div class=${'flex justify-center mb-2 '+(file?'text-emerald-500':'text-gray-300')}><${Icon} name=${file?'check':'upload'} size=${30}/></div>
           <div class="text-sm text-gray-600 truncate px-2">${file?file.name:'לחץ לבחירת תמונה או PDF'}</div>
           <input type="file" accept="image/*,.pdf" onChange=${e=>setFile(e.target.files[0]||null)} class="hidden"/>
         </label>
         <button onClick=${upload} disabled=${busy||!file}
           class="w-full bg-gradient-to-l from-blue-600 to-indigo-600 text-white py-3 rounded-xl text-sm font-bold hover:opacity-90 disabled:opacity-40 transition-opacity shadow-sm">
-          ${busy?'⏳ מעלה...':'📤 העלה תלוש'}</button>
+          ${busy?'מעלה...':html`<${Icon} name="upload" size=${14}/> העלה תלוש`}</button>
         ${status&&html`<div class=${'text-xs text-center py-2 px-3 rounded-xl '+(status.includes('שגיאה')?'bg-red-50 text-red-600':'bg-emerald-50 text-emerald-700')}>${status}</div>`}
       </div>`}
 
     <!-- List -->
     ${grouped.length===0?html`
       <div class="text-center py-16 text-gray-400 bg-white rounded-2xl border border-gray-100">
-        <div class="text-6xl mb-3">🗂️</div>
+        <div class="flex justify-center mb-3 text-gray-300"><${Icon} name="folder" size=${48}/></div>
         <div class="font-semibold text-gray-500">עדיין אין תלושים</div>
         <div class="text-xs mt-1">התלושים שתעלה יופיעו כאן לפי חודשים</div>
       </div>`:
@@ -1712,14 +1768,14 @@ function PayslipsPage({payslips,setPayslips,setShifts,setTab}) {
             <div key=${p.id} class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex items-stretch">
               <div class="w-1.5 flex-shrink-0" style=${{backgroundColor:c}}/>
               <div class="flex items-center gap-3 p-3 flex-1 min-w-0">
-                <div class="w-11 h-11 rounded-xl flex items-center justify-center text-2xl flex-shrink-0" style=${{backgroundColor:c+'22'}}>📄</div>
+                <div class="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0" style=${{backgroundColor:c+'22',color:c}}><${Icon} name="file" size=${20}/></div>
                 <div class="flex-1 min-w-0">
                   <div class="text-sm font-bold text-gray-800">תלוש ${g.label}</div>
                   <div class="text-xs text-gray-400 truncate">הועלה ${new Date(p.uploadedAt).toLocaleDateString('he-IL')}</div>
                 </div>
-                <a href=${p.driveLink} target="_blank" rel="noopener"
-                  class="flex-shrink-0 bg-blue-50 text-blue-600 rounded-lg px-3 py-1.5 text-xs font-semibold hover:bg-blue-100 transition-colors">👁️ צפה</a>
-                <button onClick=${()=>del(p)} class="flex-shrink-0 p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 text-base">🗑️</button>
+                <a href=${safeUrl(p.driveLink)||'#'} target="_blank" rel="noopener noreferrer"
+                  class="flex-shrink-0 bg-blue-50 text-blue-600 rounded-lg px-3 py-1.5 text-xs font-semibold hover:bg-blue-100 transition-colors flex items-center gap-1"><${Icon} name="eye" size=${13}/> צפה</a>
+                <button onClick=${()=>del(p)} class="flex-shrink-0 p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500"><${Icon} name="trash" size=${16}/></button>
               </div>
             </div>`;})}
         </div>`)}
@@ -1758,11 +1814,11 @@ function SettingsPage({settings,setSettings,jobs,shifts,setJobs,setShifts,paysli
     </div>
 
     <div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm space-y-3">
-      <h3 class="text-sm font-semibold text-gray-700">🔔 התראות ותזכורות</h3>
+      <h3 class="text-sm font-semibold text-gray-700 flex items-center gap-1.5"><${Icon} name="bell" size=${15}/> התראות ותזכורות</h3>
       ${notifPerm==='unsupported'
         ? html`<div class="text-xs text-amber-700 bg-amber-50 rounded-lg p-2">הדפדפן במכשיר זה אינו תומך בהתראות.</div>`
         : notifPerm!=='granted'
-          ? html`<button onClick=${reqNotif} class="w-full text-sm bg-blue-500 text-white py-2.5 rounded-lg hover:bg-blue-600 font-semibold">🔔 הפעל התראות</button>`
+          ? html`<button onClick=${reqNotif} class="w-full text-sm bg-blue-500 text-white py-2.5 rounded-lg hover:bg-blue-600 font-semibold"><${Icon} name="bell" size=${14}/> הפעל התראות</button>`
           : html`
             <label class="flex items-center justify-between cursor-pointer select-none">
               <span class="text-sm font-medium text-gray-700">התראות פעילות</span>
@@ -1773,7 +1829,7 @@ function SettingsPage({settings,setSettings,jobs,shifts,setJobs,setShifts,paysli
 
                 <div class="space-y-1 pr-2">
                   <label class="flex items-center justify-between cursor-pointer select-none">
-                    <span class="text-sm text-gray-600">📅 תזכורת לפני עבודה</span>
+                    <span class="text-sm text-gray-600">תזכורת לפני עבודה</span>
                     <input type="checkbox" checked=${n.before!==false} onChange=${e=>setN('before',e.target.checked)} class="w-4 h-4 rounded"/>
                   </label>
                   ${n.before!==false&&html`
@@ -1789,7 +1845,7 @@ function SettingsPage({settings,setSettings,jobs,shifts,setJobs,setShifts,paysli
 
                 <div class="space-y-1 pr-2">
                   <label class="flex items-center justify-between cursor-pointer select-none">
-                    <span class="text-sm text-gray-600">📅 תזכורת שנייה לפני עבודה</span>
+                    <span class="text-sm text-gray-600">תזכורת שנייה לפני עבודה</span>
                     <input type="checkbox" checked=${!!n.before2} onChange=${e=>setN('before2',e.target.checked)} class="w-4 h-4 rounded"/>
                   </label>
                   ${n.before2&&html`
@@ -1805,7 +1861,7 @@ function SettingsPage({settings,setSettings,jobs,shifts,setJobs,setShifts,paysli
 
                 <div class="space-y-1 pr-2">
                   <label class="flex items-center justify-between cursor-pointer select-none">
-                    <span class="text-sm text-gray-600">💰 תזכורת לסמן משמרות ששולמו</span>
+                    <span class="text-sm text-gray-600">תזכורת לסמן משמרות ששולמו</span>
                     <input type="checkbox" checked=${n.paid!==false} onChange=${e=>setN('paid',e.target.checked)} class="w-4 h-4 rounded"/>
                   </label>
                   ${n.paid!==false&&html`
@@ -1821,7 +1877,7 @@ function SettingsPage({settings,setSettings,jobs,shifts,setJobs,setShifts,paysli
 
                 <div class="space-y-1 pr-2">
                   <label class="flex items-center justify-between cursor-pointer select-none">
-                    <span class="text-sm text-gray-600">✅ לאשר הגעה לעבודה</span>
+                    <span class="text-sm text-gray-600">לאשר הגעה לעבודה</span>
                     <input type="checkbox" checked=${n.worked!==false} onChange=${e=>setN('worked',e.target.checked)} class="w-4 h-4 rounded"/>
                   </label>
                   ${n.worked!==false&&html`
@@ -1834,26 +1890,26 @@ function SettingsPage({settings,setSettings,jobs,shifts,setJobs,setShifts,paysli
 
               </div>`}`}
       <div class="text-[11px] text-gray-400 bg-slate-50 rounded-lg p-2 leading-4">
-        ℹ️ ההתראה תופיע בפעם הראשונה שהאפליקציה פתוחה אחרי השעה שנקבעה (פעם ביום). בתזכורת "אישור הגעה" אפשר להקיש על ההתראה כדי לסמן שהגעת. באייפון נדרש להוסיף את האתר למסך הבית תחילה.
+        ההתראה תופיע בפעם הראשונה שהאפליקציה פתוחה אחרי השעה שנקבעה (פעם ביום). בתזכורת "אישור הגעה" אפשר להקיש על ההתראה כדי לסמן שהגעת. באייפון נדרש להוסיף את האתר למסך הבית תחילה.
       </div>
     </div>
 
     <div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
-      <h3 class="text-sm font-semibold text-gray-700 mb-3">☁️ גיבוי Google Drive</h3>
+      <h3 class="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-1.5"><${Icon} name="cloud" size=${15}/> גיבוי Google Drive</h3>
       <${GoogleDriveSection}
         settings=${settings} setSettings=${setSettings}
         jobs=${jobs} shifts=${shifts} payslips=${payslips}
         setJobs=${setJobs} setShifts=${setShifts} setPayslips=${setPayslips}/>
     </div>
     <div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
-      <h3 class="text-sm font-semibold text-gray-700 mb-3">📅 סנכרון ליומן Google</h3>
+      <h3 class="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-1.5"><${Icon} name="calendar" size=${15}/> סנכרון ליומן Google</h3>
       <${GoogleCalendarSection}
         jobs=${jobs} shifts=${shifts} setShifts=${setShifts}/>
     </div>
 
     <div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
       <button onClick=${()=>setShowCalc(v=>!v)} class="w-full flex items-center justify-between">
-        <h3 class="text-sm font-semibold text-gray-700">🧮 מחשבון שכר נטו</h3>
+        <h3 class="text-sm font-semibold text-gray-700 flex items-center gap-1.5"><${Icon} name="calc" size=${15}/> מחשבון שכר נטו</h3>
         <span class="text-gray-400 text-xs">${showCalc?'▲ הסתר':'▼ הצג'}</span>
       </button>
       ${showCalc&&html`<div class="mt-3"><${CalcPage} shifts=${shifts} jobs=${jobs} settings=${settings} setSettings=${setSettings}/></div>`}
@@ -1972,7 +2028,7 @@ function App() {
     document.body.className=darkMode?'bg-slate-50 dark min-h-screen':'bg-slate-50 min-h-screen';
   },[darkMode]);
 
-  const TABS=[{id:'dashboard',label:'דשבורד',icon:'📊'},{id:'shifts',label:'משמרות',icon:'📅'},{id:'jobs',label:'משרות',icon:'💼'},{id:'payslips',label:'תלושים',icon:'🧾'},{id:'settings',label:'הגדרות',icon:'⚙️'}];
+  const TABS=[{id:'dashboard',label:'דשבורד',icon:'dashboard'},{id:'shifts',label:'משמרות',icon:'calendar'},{id:'jobs',label:'משרות',icon:'briefcase'},{id:'payslips',label:'תלושים',icon:'receipt'},{id:'settings',label:'הגדרות',icon:'settings'}];
 
   return html`<div class=${'min-h-screen bg-slate-50 '+(darkMode?'dark':'')}>
     <header class="bg-white border-b border-gray-200 sticky top-0 z-40 shadow-sm">
@@ -1981,13 +2037,13 @@ function App() {
           <div><div class="font-bold text-gray-800">מעקב משמרות</div><div class="text-xs text-gray-400">ניהול הכנסות לשכיר ישראלי</div></div>
           <div class="flex items-center gap-3">
             <button onClick=${togglePrivacy}
-              class=${'text-lg rounded-lg px-2 py-1 transition-colors '+(privacy?'bg-blue-50':'hover:bg-gray-100')}
+              class=${'rounded-lg p-2 transition-colors text-gray-500 '+(privacy?'bg-blue-50 text-blue-600':'hover:bg-gray-100')}
               title=${privacy?'הצג סכומים':'הסתר סכומים (מצב פרטיות)'}>
-              ${privacy?'🙈':'👁️'}</button>
+              <${Icon} name=${privacy?'eyeOff':'eye'} size=${18}/></button>
             <button onClick=${toggleDark}
-              class=${'text-lg rounded-lg px-2 py-1 transition-colors '+(darkMode?'bg-blue-50':'hover:bg-gray-100')}
+              class=${'rounded-lg p-2 transition-colors text-gray-500 '+(darkMode?'bg-blue-50 text-blue-600':'hover:bg-gray-100')}
               title=${darkMode?'עבור למצב בהיר':'עבור למצב כהה'}>
-              ${darkMode?'☀️':'🌙'}</button>
+              <${Icon} name=${darkMode?'sun':'moon'} size=${18}/></button>
             <img src="./icon.jpg" alt="לוגו" class="w-9 h-9 rounded-lg object-cover shadow-sm"/>
           </div>
         </div>
@@ -1995,7 +2051,7 @@ function App() {
           ${TABS.map(t=>html`
             <button key=${t.id} onClick=${()=>setTab(t.id)}
               class=${'flex items-center gap-1.5 px-3 py-2.5 text-xs font-semibold whitespace-nowrap border-b-2 transition-colors '+(tab===t.id?'border-blue-500 text-blue-600':'border-transparent text-gray-500 hover:text-gray-700')}>
-              <span>${t.icon}</span><span>${t.label}</span>
+              <${Icon} name=${t.icon} size=${15}/><span>${t.label}</span>
             </button>`)}
         </nav>
       </div>
