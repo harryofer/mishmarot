@@ -285,21 +285,22 @@ function MonthNav({year,month,onChange}) {
 }
 
 // ── MonthStrip (quick month jump bar) ────────────────────────
-const MONTHS_SHORT=['ינו','פבר','מרץ','אפר','מאי','יונ','יול','אוג','ספט','אוק','נוב','דצמ'];
 function MonthStrip({year,month,onChange}) {
   const now=new Date();
-  return html`<div class="flex items-center gap-1">
-    <button onClick=${()=>onChange(year-1,month)} class="flex-shrink-0 text-gray-400 hover:text-gray-600 text-sm px-1">‹</button>
-    <span class="flex-shrink-0 text-xs font-semibold text-gray-500 w-10 text-center">${year}</span>
-    <div class="flex gap-1 overflow-x-auto py-0.5 flex-1">
-      ${MONTHS_SHORT.map((l,i)=>{
+  return html`<div class="space-y-1.5">
+    <div class="flex items-center justify-center gap-4">
+      <button onClick=${()=>onChange(year-1,month)} class="text-gray-400 hover:text-gray-600 text-base px-2">‹</button>
+      <span class="text-sm font-bold text-gray-700 w-14 text-center">${year}</span>
+      <button onClick=${()=>onChange(year+1,month)} class="text-gray-400 hover:text-gray-600 text-base px-2">›</button>
+    </div>
+    <div class="flex gap-1.5 overflow-x-auto py-0.5">
+      ${MONTHS.map((l,i)=>{
         const sel=i===month, isNow=year===now.getFullYear()&&i===now.getMonth();
         return html`<button key=${i} onClick=${()=>onChange(year,i)}
-          class=${'flex-shrink-0 px-2.5 py-1 rounded-full text-xs font-medium transition-colors '+(sel?'bg-blue-500 text-white':isNow?'bg-blue-50 text-blue-600 border border-blue-200':'bg-gray-100 text-gray-600 hover:bg-gray-200')}>
+          class=${'flex-shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-colors '+(sel?'bg-blue-500 text-white':isNow?'bg-blue-50 text-blue-600 border border-blue-200':'bg-gray-100 text-gray-600 hover:bg-gray-200')}>
           ${l}</button>`;
       })}
     </div>
-    <button onClick=${()=>onChange(year+1,month)} class="flex-shrink-0 text-gray-400 hover:text-gray-600 text-sm px-1">›</button>
   </div>`;
 }
 
@@ -1175,7 +1176,7 @@ function DashboardPage({shifts,jobs,settings,payslips,setTab}) {
         ? html`<div class="text-xs text-gray-400">לא צורף תלוש לחודש זה — ניתן לצרף בלשונית "תלושים".</div>`
         : monthPayslips.map(p=>html`<a key=${p.id} href=${p.driveLink} target="_blank" rel="noopener"
             class="flex items-center gap-2 py-1.5 text-sm text-blue-700 hover:underline">
-            <span>📄</span><span class="truncate">${p.name}</span><span class="text-gray-300">🔗</span>
+            <span class="flex-shrink-0">📄</span><span class="flex-1 min-w-0 truncate">צפה בתלוש</span><span class="text-gray-300 flex-shrink-0">🔗</span>
           </a>`)}
     </div>
 
@@ -1642,18 +1643,14 @@ function PayslipsPage({payslips,setPayslips,setTab}) {
       </div>`:
       grouped.map(g=>html`<div key=${g.month} class="space-y-2">
         <div class="text-xs font-semibold text-gray-400">${g.label}</div>
-        ${g.items.map(p=>html`<div key=${p.id} class="bg-white rounded-xl border border-gray-100 p-3 shadow-sm flex items-center justify-between gap-2">
-          <div class="flex items-center gap-2 min-w-0">
-            <span class="text-xl flex-shrink-0">📄</span>
-            <div class="min-w-0">
-              <div class="text-sm font-medium text-gray-800 truncate">${p.name}</div>
-              <div class="text-xs text-gray-400">${new Date(p.uploadedAt).toLocaleDateString('he-IL')}</div>
-            </div>
+        ${g.items.map(p=>html`<div key=${p.id} class="bg-white rounded-xl border border-gray-100 p-3 shadow-sm flex items-center gap-3">
+          <span class="text-2xl flex-shrink-0">📄</span>
+          <div class="flex-1 min-w-0">
+            <div class="text-sm font-medium text-gray-800">תלוש שכר · ${g.label}</div>
+            <div class="text-xs text-gray-400 truncate">${new Date(p.uploadedAt).toLocaleDateString('he-IL')} · ${p.name}</div>
           </div>
-          <div class="flex items-center gap-1 flex-shrink-0">
-            <a href=${p.driveLink} target="_blank" rel="noopener" class="p-1.5 rounded hover:bg-blue-50 text-gray-400 hover:text-blue-500 text-sm">🔗</a>
-            <button onClick=${()=>del(p)} class="p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-red-500 text-sm">🗑️</button>
-          </div>
+          <a href=${p.driveLink} target="_blank" rel="noopener" class="flex-shrink-0 p-1.5 rounded hover:bg-blue-50 text-gray-400 hover:text-blue-500 text-base">🔗</a>
+          <button onClick=${()=>del(p)} class="flex-shrink-0 p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-red-500 text-base">🗑️</button>
         </div>`)}
       </div>`)}
   </div>`;
