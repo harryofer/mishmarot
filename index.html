@@ -1498,20 +1498,68 @@ function SettingsPage({settings,setSettings,jobs,shifts,setJobs,setShifts}) {
             </label>
             ${n.on!==false&&html`
               <div class="space-y-3 pr-1 border-r-2 border-gray-100">
-                ${[['before','📅 יום לפני עבודה','beforeTime','20:00'],['paid','💰 לסמן משמרות ששולמו','paidTime','10:00'],['worked','✅ לאשר הגעה לעבודה','workedTime','18:00']]
-                  .map(([k,l,tk,td])=>html`
-                    <div key=${k} class="space-y-1 pr-2">
-                      <label class="flex items-center justify-between cursor-pointer select-none">
-                        <span class="text-sm text-gray-600">${l}</span>
-                        <input type="checkbox" checked=${n[k]!==false} onChange=${e=>setN(k,e.target.checked)} class="w-4 h-4 rounded"/>
-                      </label>
-                      ${n[k]!==false&&html`
-                        <div class="flex items-center justify-between pr-4">
-                          <span class="text-xs text-gray-400">שעת שליחה</span>
-                          <input type="time" value=${n[tk]||td} onChange=${e=>setN(tk,e.target.value)}
-                            class="border border-gray-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-300"/>
-                        </div>`}
-                    </div>`)}
+
+                <div class="space-y-1 pr-2">
+                  <label class="flex items-center justify-between cursor-pointer select-none">
+                    <span class="text-sm text-gray-600">📅 תזכורת לפני עבודה</span>
+                    <input type="checkbox" checked=${n.before!==false} onChange=${e=>setN('before',e.target.checked)} class="w-4 h-4 rounded"/>
+                  </label>
+                  ${n.before!==false&&html`
+                    <div class="flex items-center gap-2 justify-end pr-4 text-xs text-gray-400 flex-wrap">
+                      <span>כמה ימים לפני</span>
+                      <input type="number" min="0" max="30" value=${n.beforeDays==null?1:n.beforeDays} onChange=${e=>setN('beforeDays',Math.max(0,+e.target.value||0))}
+                        class="w-14 border border-gray-200 rounded-lg px-2 py-1 text-xs text-center focus:outline-none focus:ring-2 focus:ring-blue-300"/>
+                      <span>בשעה</span>
+                      <input type="time" value=${n.beforeTime||'20:00'} onChange=${e=>setN('beforeTime',e.target.value)}
+                        class="border border-gray-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-300"/>
+                    </div>`}
+                </div>
+
+                <div class="space-y-1 pr-2">
+                  <label class="flex items-center justify-between cursor-pointer select-none">
+                    <span class="text-sm text-gray-600">📅 תזכורת שנייה לפני עבודה</span>
+                    <input type="checkbox" checked=${!!n.before2} onChange=${e=>setN('before2',e.target.checked)} class="w-4 h-4 rounded"/>
+                  </label>
+                  ${n.before2&&html`
+                    <div class="flex items-center gap-2 justify-end pr-4 text-xs text-gray-400 flex-wrap">
+                      <span>כמה ימים לפני</span>
+                      <input type="number" min="0" max="30" value=${n.before2Days==null?2:n.before2Days} onChange=${e=>setN('before2Days',Math.max(0,+e.target.value||0))}
+                        class="w-14 border border-gray-200 rounded-lg px-2 py-1 text-xs text-center focus:outline-none focus:ring-2 focus:ring-blue-300"/>
+                      <span>בשעה</span>
+                      <input type="time" value=${n.before2Time||'20:00'} onChange=${e=>setN('before2Time',e.target.value)}
+                        class="border border-gray-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-300"/>
+                    </div>`}
+                </div>
+
+                <div class="space-y-1 pr-2">
+                  <label class="flex items-center justify-between cursor-pointer select-none">
+                    <span class="text-sm text-gray-600">💰 תזכורת לסמן משמרות ששולמו</span>
+                    <input type="checkbox" checked=${n.paid!==false} onChange=${e=>setN('paid',e.target.checked)} class="w-4 h-4 rounded"/>
+                  </label>
+                  ${n.paid!==false&&html`
+                    <div class="flex items-center gap-2 justify-end pr-4 text-xs text-gray-400 flex-wrap">
+                      <span>כל חודש ביום</span>
+                      <input type="number" min="1" max="31" value=${n.paidDay==null?10:n.paidDay} onChange=${e=>setN('paidDay',Math.min(31,Math.max(1,+e.target.value||1)))}
+                        class="w-14 border border-gray-200 rounded-lg px-2 py-1 text-xs text-center focus:outline-none focus:ring-2 focus:ring-blue-300"/>
+                      <span>בשעה</span>
+                      <input type="time" value=${n.paidTime||'12:00'} onChange=${e=>setN('paidTime',e.target.value)}
+                        class="border border-gray-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-300"/>
+                    </div>`}
+                </div>
+
+                <div class="space-y-1 pr-2">
+                  <label class="flex items-center justify-between cursor-pointer select-none">
+                    <span class="text-sm text-gray-600">✅ לאשר הגעה לעבודה</span>
+                    <input type="checkbox" checked=${n.worked!==false} onChange=${e=>setN('worked',e.target.checked)} class="w-4 h-4 rounded"/>
+                  </label>
+                  ${n.worked!==false&&html`
+                    <div class="flex items-center gap-2 justify-end pr-4 text-xs text-gray-400">
+                      <span>בשעה</span>
+                      <input type="time" value=${n.workedTime||'18:00'} onChange=${e=>setN('workedTime',e.target.value)}
+                        class="border border-gray-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-300"/>
+                    </div>`}
+                </div>
+
               </div>`}`}
       <div class="text-[11px] text-gray-400 bg-slate-50 rounded-lg p-2 leading-4">
         ℹ️ ההתראה תופיע בפעם הראשונה שהאפליקציה פתוחה אחרי השעה שנקבעה (פעם ביום). בתזכורת "אישור הגעה" אפשר להקיש על ההתראה כדי לסמן שהגעת. באייפון נדרש להוסיף את האתר למסך הבית תחילה.
@@ -1564,17 +1612,30 @@ function useReminders(shifts,settings,setShifts){
       const now=new Date();
       const hm=String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
       const due=t=>hm>=(t||'00:00');
-      const dt=new Date(today+'T12:00:00'); dt.setDate(dt.getDate()+1);
-      const tmr=dt.toISOString().slice(0,10);
+      const daysAhead=k=>{ const d=new Date(today+'T12:00:00'); d.setDate(d.getDate()+k); return d.toISOString().slice(0,10); };
+      const whenTxt=k=> k===0?'היום':k===1?'מחר':'בעוד '+k+' ימים';
       let log={}; try{log=JSON.parse(localStorage.getItem('sw_notified')||'{}');}catch(e){}
       const mark=k=>{ log[k]=today; try{localStorage.setItem('sw_notified',JSON.stringify(log));}catch(e){} };
+      // Work reminder 1
       if(n.before!==false && due(n.beforeTime||'20:00') && log.before!==today){
-        const t=shifts.filter(s=>s.date===tmr);
-        if(t.length){ if(fireNote('תזכורת עבודה 📅','יש לך '+t.length+' משמרות מחר')) mark('before'); }
+        const bd=n.beforeDays==null?1:n.beforeDays;
+        const t=shifts.filter(s=>s.date===daysAhead(bd));
+        if(t.length){ if(fireNote('תזכורת עבודה 📅','יש לך '+t.length+' משמרות '+whenTxt(bd))) mark('before'); }
       }
-      if(n.paid!==false && due(n.paidTime||'10:00') && log.paid!==today){
-        const unpaid=shifts.filter(s=>s.date<today&&!s.isPaid);
-        if(unpaid.length){ if(fireNote('תזכורת תשלום 💰','יש '+unpaid.length+' משמרות שטרם סומנו כשולם')) mark('paid'); }
+      // Work reminder 2 (optional)
+      if(n.before2 && due(n.before2Time||'20:00') && log.before2!==today){
+        const bd=n.before2Days==null?2:n.before2Days;
+        const t=shifts.filter(s=>s.date===daysAhead(bd));
+        if(t.length){ if(fireNote('תזכורת עבודה 📅','יש לך '+t.length+' משמרות '+whenTxt(bd))) mark('before2'); }
+      }
+      // Paid reminder — monthly on chosen day-of-month
+      if(n.paid!==false && due(n.paidTime||'12:00') && log.paid!==today){
+        const dim=mDays(now.getFullYear(),now.getMonth());
+        const targetDay=Math.min(n.paidDay==null?10:n.paidDay, dim);
+        if(now.getDate()===targetDay){
+          const unpaid=shifts.filter(s=>s.date<today&&!s.isPaid);
+          if(unpaid.length){ if(fireNote('תזכורת תשלום 💰','יש '+unpaid.length+' משמרות שטרם סומנו כשולם')) mark('paid'); }
+        }
       }
       if(n.worked!==false && due(n.workedTime||'18:00') && log.worked!==today){
         const tod=shifts.filter(s=>s.date===today);
