@@ -239,6 +239,12 @@ function useLS(key, def) {
 
 // ── findJob helper ───────────────────────────────────────────
 function findJob(jobs, id) { return jobs.find(j=>j.id===id)||null; }
+// Travel for a shift: its own value, or fall back to the job's per-day travel (so existing shifts pick it up)
+function shiftTravel(s, jobs) {
+  if (s.travel!=null && s.travel!==0) return s.travel;
+  const j=findJob(jobs,s.jobId);
+  return (j&&j.travelPerDay)||0;
+}
 
 // ── Modal ────────────────────────────────────────────────────
 function Modal({title, onClose, children}) {
@@ -1084,14 +1090,15 @@ function DashboardPage({shifts,jobs,settings,payslips,setTab}) {
     ms.forEach(s=>{ const j=findJob(jobs,s.jobId); if(j&&j.rateType==='monthly') monthlyJobIds.add(s.jobId); });
     const monthlyTotal=Array.from(monthlyJobIds).reduce((n,jid)=>{const j=findJob(jobs,jid);return n+(j?j.rate:0);},0);
 
-    const earn=arr=>arr.reduce((n,s)=>n+s.earnings+(s.travel||0)+(s.bonus||0),0);
+    const earn=arr=>arr.reduce((n,s)=>n+s.earnings+shiftTravel(s,jobs)+(s.bonus||0),0);
     const gA=earn(past)+monthlyTotal, gF=earn(ms)+monthlyTotal;
     const paid=earn(past.filter(s=>s.isPaid)), pend=earn(past.filter(s=>!s.isPaid));
+    const travelTotal=past.reduce((n,s)=>n+shiftTravel(s,jobs),0);
 
     // Pension base: only shifts/months where the job is pension-eligible on that date (3-month rule, or manual override)
     const pensionEarn=arr=>arr.reduce((n,s)=>{
       const j=findJob(jobs,s.jobId);
-      return pensionEligible(j,s.date) ? n+s.earnings+(s.travel||0)+(s.bonus||0) : n;
+      return pensionEligible(j,s.date) ? n+s.earnings+shiftTravel(s,jobs)+(s.bonus||0) : n;
     },0);
     const monthlyPensionTotal=Array.from(monthlyJobIds).reduce((n,jid)=>{
       const j=findJob(jobs,jid);
@@ -1103,12 +1110,12 @@ function DashboardPage({shifts,jobs,settings,payslips,setTab}) {
     const byJob={};
     ms.forEach(s=>{
       const k=s.jobId; byJob[k]=byJob[k]||{shifts:0,earn:0};
-      byJob[k].shifts++; byJob[k].earn+=s.earnings+(s.travel||0)+(s.bonus||0);
+      byJob[k].shifts++; byJob[k].earn+=s.earnings+shiftTravel(s,jobs)+(s.bonus||0);
     });
     // Add monthly rate to each monthly job's byJob entry
     monthlyJobIds.forEach(jid=>{ const j=findJob(jobs,jid); if(j&&byJob[jid]) byJob[jid].earn+=j.rate; });
     const hrs=ms.reduce((n,s)=>n+(s.hours||0),0);
-    return {ms,past,fut,gA,gF,paid,pend,nA,nF,byJob,hrs,monthlyTotal};
+    return {ms,past,fut,gA,gF,paid,pend,travelTotal,nA,nF,byJob,hrs,monthlyTotal};
   },[shifts,jobs,year,month,settings.creditPoints,today]);
 
   // ── Sharing ──
@@ -1169,6 +1176,12 @@ function DashboardPage({shifts,jobs,settings,payslips,setTab}) {
       <div class="bg-blue-50 border border-blue-100 rounded-xl px-4 py-2.5 text-sm text-blue-700 flex items-center gap-2">
         <span>💼</span>
         <span>כולל שכר חודשי קבוע: <strong>${fmt(d.monthlyTotal)}</strong></span>
+      </div>`}
+
+    ${d.travelTotal>0&&html`
+      <div class="bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-2.5 text-sm text-emerald-700 flex items-center gap-2">
+        <span>🚗</span>
+        <span>כולל החזר נסיעות: <strong>${fmt(d.travelTotal)}</strong></span>
       </div>`}
 
     <div class="grid grid-cols-2 gap-3">
@@ -1260,7 +1273,7 @@ function DashboardPage({shifts,jobs,settings,payslips,setTab}) {
                   <span class="text-gray-700 font-medium">${(job&&job.name)||'לא ידוע'}</span>
                   <span class="text-gray-400">${jd.shifts} משמרות</span>
                 </div>
-                <span class="font-semibold">${fmt(jd.earn)}</span>
+                <span class="font-semibold text-gray-800">${fmt(jd.earn)}</span>
               </div>
               <div class="h-1.5 bg-gray-100 rounded-full overflow-hidden">
                 <div class="h-full rounded-full" style=${{width:pct+'%',backgroundColor:(job&&job.color)||'#9CA3AF'}}/>
@@ -1292,10 +1305,10 @@ function CalcPage({shifts,jobs,settings,setSettings}) {
     return shifts.filter(s=>{const[y,m]=s.date.split('-').map(Number);return y===year&&m===month+1&&s.date<=t;});
   },[shifts,year,month]);
 
-  const autoG=useMemo(()=>monthShifts.reduce((n,s)=>n+s.earnings+(s.travel||0)+(s.bonus||0),0),[monthShifts]);
+  const autoG=useMemo(()=>monthShifts.reduce((n,s)=>n+s.earnings+shiftTravel(s,jobs)+(s.bonus||0),0),[monthShifts,jobs]);
   const autoPensionBase=useMemo(()=>monthShifts.reduce((n,s)=>{
     const j=findJob(jobs,s.jobId);
-    return pensionEligible(j,s.date) ? n+s.earnings+(s.travel||0)+(s.bonus||0) : n;
+    return pensionEligible(j,s.date) ? n+s.earnings+shiftTravel(s,jobs)+(s.bonus||0) : n;
   },0),[monthShifts,jobs]);
 
   const gross=manual?(+mg||0):autoG;
@@ -1634,8 +1647,8 @@ function PayslipsPage({payslips,setPayslips,setTab}) {
         <h3 class="text-sm font-semibold text-gray-700">הוסף תלוש</h3>
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">חודש</label>
-          <input type="month" value=${month} onChange=${e=>setMonth(e.target.value)}
-            class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
+          <input type="month" value=${month} onChange=${e=>setMonth(e.target.value)} dir="ltr"
+            class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-blue-300"/>
         </div>
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">קובץ (תמונה או PDF)</label>
