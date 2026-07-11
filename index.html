@@ -15,15 +15,17 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="משמרות">
   <meta name="theme-color" content="#3b82f6">
-  <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%233b82f6'/%3E%3Ctext y='.85em' font-size='72' x='10'%3E%F0%9F%92%BC%3C/text%3E%3C/svg%3E">
+  <link rel="icon" href="./icon.png">
+  <link rel="apple-touch-icon" href="./icon.png">
   <script>
   // PWA manifest (blob works in Chrome/Edge on HTTPS)
   (function(){
     try {
+      const iconUrl=new URL('icon.png', location.href).href;
       const m={name:'מעקב משמרות',short_name:'משמרות',start_url:'./',
         display:'standalone',background_color:'#f8fafc',theme_color:'#3b82f6',lang:'he',dir:'rtl',
-        icons:[{src:"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%233b82f6'/%3E%3Ctext y='.85em' font-size='72' x='10'%3E%F0%9F%92%BC%3C/text%3E%3C/svg%3E",
-          sizes:'512x512',type:'image/svg+xml',purpose:'any maskable'}]};
+        icons:[{src:iconUrl,sizes:'512x512',type:'image/png',purpose:'any'},
+               {src:iconUrl,sizes:'512x512',type:'image/png',purpose:'maskable'}]};
       const l=document.createElement('link');l.rel='manifest';
       l.href=URL.createObjectURL(new Blob([JSON.stringify(m)],{type:'application/manifest+json'}));
       document.head.appendChild(l);
@@ -1254,7 +1256,7 @@ function DashboardPage({shifts,jobs,settings,payslips,setTab}) {
         </div>
         ${d.travelTotal>0&&html`
           <div class="mt-3 pt-3 border-t border-gray-100">
-            <h3 class="text-sm font-semibold text-emerald-700 mb-2">תוספות (לא נוכה מהשכר)</h3>
+            <h3 class="text-sm font-semibold text-emerald-700 mb-2">תוספות</h3>
             <div class="flex items-center gap-2">
               <div class="w-2.5 h-2.5 rounded-full flex-shrink-0" style=${{backgroundColor:'#10B981'}}/>
               <span class="text-xs text-gray-600 flex-1">🚗 החזר נסיעות</span>
