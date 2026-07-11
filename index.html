@@ -962,8 +962,7 @@ function ShiftsPage({shifts,setShifts,jobs}) {
   const sorted=[...ms].sort((a,b)=>b.date<a.date?-1:b.date>a.date?1:0);
 
   return html`<div class="space-y-4">
-    <div class="flex items-center justify-between flex-wrap gap-2">
-      <${MonthNav} year=${year} month=${month} onChange=${(y,m)=>{setYear(y);setMonth(m);}}/>
+    <div class="flex items-center justify-end flex-wrap gap-2">
       <div class="flex items-center gap-2">
         <div class="flex rounded-lg border border-gray-200 overflow-hidden">
           ${[['calendar','📅 לוח'],['list','📋 רשימה']].map(([v,l])=>html`
@@ -1163,7 +1162,6 @@ function DashboardPage({shifts,jobs,settings,payslips,setTab}) {
   return html`<div class="space-y-5">
     <div class="flex items-center justify-between flex-wrap gap-2">
       <h2 class="text-base font-bold text-gray-800">סיכום חודשי</h2>
-      <${MonthNav} year=${year} month=${month} onChange=${(y,m)=>{setYear(y);setMonth(m);}}/>
     </div>
     <${MonthStrip} year=${year} month=${month} onChange=${(y,m)=>{setYear(y);setMonth(m);}}/>
 
