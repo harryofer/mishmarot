@@ -284,6 +284,25 @@ function MonthNav({year,month,onChange}) {
   </div>`;
 }
 
+// ── MonthStrip (quick month jump bar) ────────────────────────
+const MONTHS_SHORT=['ינו','פבר','מרץ','אפר','מאי','יונ','יול','אוג','ספט','אוק','נוב','דצמ'];
+function MonthStrip({year,month,onChange}) {
+  const now=new Date();
+  return html`<div class="flex items-center gap-1">
+    <button onClick=${()=>onChange(year-1,month)} class="flex-shrink-0 text-gray-400 hover:text-gray-600 text-sm px-1">‹</button>
+    <span class="flex-shrink-0 text-xs font-semibold text-gray-500 w-10 text-center">${year}</span>
+    <div class="flex gap-1 overflow-x-auto py-0.5 flex-1">
+      ${MONTHS_SHORT.map((l,i)=>{
+        const sel=i===month, isNow=year===now.getFullYear()&&i===now.getMonth();
+        return html`<button key=${i} onClick=${()=>onChange(year,i)}
+          class=${'flex-shrink-0 px-2.5 py-1 rounded-full text-xs font-medium transition-colors '+(sel?'bg-blue-500 text-white':isNow?'bg-blue-50 text-blue-600 border border-blue-200':'bg-gray-100 text-gray-600 hover:bg-gray-200')}>
+          ${l}</button>`;
+      })}
+    </div>
+    <button onClick=${()=>onChange(year+1,month)} class="flex-shrink-0 text-gray-400 hover:text-gray-600 text-sm px-1">›</button>
+  </div>`;
+}
+
 // ── StatCard ─────────────────────────────────────────────────
 function StatCard({label,value,sub,color,icon}) {
   const cls={blue:'bg-blue-50 text-blue-700 border-blue-100',green:'bg-emerald-50 text-emerald-700 border-emerald-100',
@@ -562,6 +581,10 @@ function CalendarView({year,month,shifts,jobs,onDayClick,onShiftClick,onRangeSel
   const cells=[...Array(first).fill(null),...Array.from({length:days},(_,i)=>i+1)];
 
   return html`<div>
+    <div class="flex items-center justify-between mb-2 px-1">
+      <span class="text-xs font-medium text-gray-500">${MONTHS[month]} ${year}</span>
+      <span class="text-xs font-semibold text-blue-600 bg-blue-50 rounded-full px-2 py-0.5">${shifts.length} משמרות החודש</span>
+    </div>
     <div class="grid grid-cols-7 gap-0.5 mb-1">
       ${DAYS.map(d=>html`<div key=${d} class="text-center text-xs font-medium text-gray-400 py-1">${d}</div>`)}
     </div>
@@ -588,10 +611,11 @@ function CalendarView({year,month,shifts,jobs,onDayClick,onShiftClick,onRangeSel
           }}
           onTouchStart=${e=>{
             tRef.current.isTouch=true;
-            if(e.target.closest&&e.target.closest('[data-shift]')) return;
+            tRef.current.dragged=false;
             tRef.current.pendingTap=ds; tRef.current.moved=false;
             clearTimeout(tRef.current.timer);
             tRef.current.timer=setTimeout(()=>{
+              tRef.current.dragged=true;
               dragRef.current={active:true,start:ds,end:ds};
               setDragStart(ds); setDragEnd(ds);
               navigator.vibrate&&navigator.vibrate(30);
@@ -599,7 +623,7 @@ function CalendarView({year,month,shifts,jobs,onDayClick,onShiftClick,onRangeSel
           }}>
           <div class=${'text-xs font-semibold mb-0.5 '+(isT?'text-blue-600':'text-gray-500')}>${day}</div>
           ${ds2.slice(0,2).map(s=>{ const j=findJob(jobs,s.jobId); return html`
-            <div key=${s.id} data-shift="1" onClick=${e=>{e.stopPropagation();onShiftClick(s);}}
+            <div key=${s.id} data-shift="1" onClick=${e=>{e.stopPropagation();if(tRef.current.dragged)return;onShiftClick(s);}}
               class="text-[10px] px-1 py-0.5 rounded text-white break-words leading-tight mb-0.5 hover:opacity-80"
               style=${{backgroundColor:(j&&j.color)||'#9CA3AF'}}>${(j&&j.name)||'?'}</div>`;})}
           ${ds2.length>2&&html`<div class="text-[10px] text-gray-400">+${ds2.length-2}</div>`}
@@ -608,7 +632,7 @@ function CalendarView({year,month,shifts,jobs,onDayClick,onShiftClick,onRangeSel
     </div>
     ${selSet.size>0
       ? html`<div class="mt-2 text-xs text-blue-600 text-center">נבחרו ${selSet.size} ימים</div>`
-      : html`<div class="mt-2 text-[11px] text-gray-400 text-center">💡 לחיצה ארוכה + גרירה לבחירת טווח ימים</div>`}
+      : html`<div class="mt-2 text-[11px] text-gray-400 text-center">💡 לחיצה ארוכה (על יום או משמרת) + גרירה לבחירת טווח ימים</div>`}
   </div>`;
 }
 
@@ -938,6 +962,7 @@ function ShiftsPage({shifts,setShifts,jobs}) {
         <button onClick=${()=>setDeleteModal(true)} class="bg-red-500 text-white px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-red-600 transition-colors">🗑️ מחיקה מרובה</button>
       </div>
     </div>
+    <${MonthStrip} year=${year} month=${month} onChange=${(y,m)=>{setYear(y);setMonth(m);}}/>
 
     ${view==='calendar'?html`
       <div class="bg-white rounded-xl border border-gray-100 p-3 shadow-sm">
@@ -1126,6 +1151,7 @@ function DashboardPage({shifts,jobs,settings,payslips,setTab}) {
       <h2 class="text-base font-bold text-gray-800">סיכום חודשי</h2>
       <${MonthNav} year=${year} month=${month} onChange=${(y,m)=>{setYear(y);setMonth(m);}}/>
     </div>
+    <${MonthStrip} year=${year} month=${month} onChange=${(y,m)=>{setYear(y);setMonth(m);}}/>
 
     ${d.monthlyTotal>0&&html`
       <div class="bg-blue-50 border border-blue-100 rounded-xl px-4 py-2.5 text-sm text-blue-700 flex items-center gap-2">
