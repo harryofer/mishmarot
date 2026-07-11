@@ -309,15 +309,13 @@ function JobForm({initial, onSave, onClose}) {
   const [hoursMode, setHoursMode] = useState((initial&&initial.hoursMode)||'fixed');
   const [jobStart,  setJobStart]  = useState((initial&&initial.startDate)||todayS());
   const [pensionMode,setPensionMode]=useState((initial&&initial.pensionMode)||'auto');
-  const [travelMode,setTravelMode]=useState((initial&&initial.travelMode)||'flat');
-  const [travelRate,setTravelRate]=useState((initial&&initial.travelRatePerKm!=null)?String(initial.travelRatePerKm):'1.8');
 
   const pensionFrom = addMonths(jobStart||todayS(),3);
 
   const submit = () => {
     if (!name.trim()) return alert('יש למלא שם משרה');
     if (!rate||+rate<=0) return alert('יש להזין תעריף תקין');
-    onSave({name:name.trim(),color,rateType:type,rate:+rate,startTime,endTime,hoursMode,startDate:jobStart,pensionMode,travelMode,travelRatePerKm:+travelRate||0});
+    onSave({name:name.trim(),color,rateType:type,rate:+rate,startTime,endTime,hoursMode,startDate:jobStart,pensionMode});
   };
   return html`<div class="space-y-4">
     <div>
@@ -384,23 +382,6 @@ function JobForm({initial, onSave, onClose}) {
       </div>
       ${pensionMode==='auto'&&html`<p class="text-xs text-gray-400 mt-1">לפי תאריך ההתחלה, ניכוי הפנסיה יתחיל מ־${pensionFrom}.</p>`}
     </div>
-    <div>
-      <label class="block text-sm font-medium text-gray-700 mb-1">החזר נסיעות</label>
-      <div class="flex gap-2 mb-2">
-        ${[['flat','סכום קבוע ידני'],['perKm','לפי ק"מ נסועים']].map(([v,l])=>html`
-          <button key=${v} onClick=${()=>setTravelMode(v)}
-            class=${'flex-1 py-2 rounded-lg text-sm font-medium transition-colors '+(travelMode===v?'bg-blue-500 text-white':'bg-gray-100 text-gray-600 hover:bg-gray-200')}>
-            ${l}</button>`)}
-      </div>
-      ${travelMode==='perKm'?html`
-        <div>
-          <span class="block text-xs text-gray-400 mb-1">תעריף לק"מ (₪)</span>
-          <input type="number" step="0.1" min="0" value=${travelRate} onInput=${e=>setTravelRate(e.target.value)}
-            class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
-        </div>
-        <p class="text-xs text-gray-400 mt-1">בכל משמרת תזין כמות ק"מ נסועים, וההחזר יחושב אוטומטית.</p>`
-        :html`<p class="text-xs text-gray-400">בכל משמרת תזין את סכום ההחזר ידנית (כמו כיום).</p>`}
-    </div>
     <div class="flex gap-2 pt-1">
       <button onClick=${submit} class="flex-1 bg-blue-500 text-white py-2 rounded-lg text-sm font-semibold hover:bg-blue-600 transition-colors">שמור</button>
       <button onClick=${onClose} class="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg text-sm font-semibold hover:bg-gray-200 transition-colors">ביטול</button>
@@ -416,7 +397,6 @@ function ShiftForm({initial, jobs, shifts, onSave, onClose, onDelete}) {
   const [startTime,setStartTime]=useState((initial&&initial.startTime)||(jobInit&&jobInit.startTime)||'08:00');
   const [endTime,  setEndTime]  =useState((initial&&initial.endTime)  ||(jobInit&&jobInit.endTime)  ||'16:00');
   const [travel, setTravel] = useState(initial&&initial.travel!=null?initial.travel:0);
-  const [km,     setKm]     = useState(initial&&initial.km!=null?initial.km:'');
   const [bonus,  setBonus]  = useState(initial&&initial.bonus!=null?initial.bonus:0);
   const [isPaid, setIsPaid] = useState(initial&&initial.isPaid!=null?initial.isPaid:false);
   const [arrived,setArrived]= useState(initial&&initial.arrived!=null?initial.arrived:false);
@@ -436,14 +416,12 @@ function ShiftForm({initial, jobs, shifts, onSave, onClose, onDelete}) {
 
   const hours      = hoursBetween(startTime,endTime);
   const baseEarn   = isMonthly ? 0 : (job?(job.rateType==='daily'?job.rate:job.rate*hours):0);
-  const perKm      = job && job.travelMode==='perKm';
-  const travelAmt  = perKm ? Math.round((+km||0)*(job.travelRatePerKm||0)*100)/100 : (+travel||0);
-  const total      = baseEarn+travelAmt+(+bonus||0);
+  const total      = baseEarn+(+travel||0)+(+bonus||0);
 
   const submit = () => {
     if (!jobId) return alert('יש לבחור משרה');
     if (!date)  return alert('יש לבחור תאריך');
-    onSave({jobId,date,hours,startTime,endTime,travel:travelAmt,km:perKm?(+km||0):undefined,bonus:+bonus||0,isPaid,arrived,notes,earnings:baseEarn});
+    onSave({jobId,date,hours,startTime,endTime,travel:+travel||0,bonus:+bonus||0,isPaid,arrived,notes,earnings:baseEarn});
   };
 
   if (!jobs.length) return html`<div class="text-center py-8 text-gray-400">
@@ -487,15 +465,9 @@ function ShiftForm({initial, jobs, shifts, onSave, onClose, onDelete}) {
       </div>`}
     <div class="grid grid-cols-2 gap-3">
       <div>
-        ${perKm?html`
-          <label class="block text-sm font-medium text-gray-700 mb-1">ק"מ נסועים</label>
-          <input type="number" step="0.1" min="0" value=${km} onInput=${e=>setKm(e.target.value)} placeholder="0"
-            class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
-          <p class="text-xs text-gray-400 mt-1">${fmt(travelAmt)} (${job.travelRatePerKm}₪ × ${km||0} ק"מ)</p>`
-          :html`
-          <label class="block text-sm font-medium text-gray-700 mb-1">נסיעות (₪)</label>
-          <input type="number" value=${travel} onInput=${e=>setTravel(e.target.value)} placeholder="0"
-            class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>`}
+        <label class="block text-sm font-medium text-gray-700 mb-1">נסיעות (₪)</label>
+        <input type="number" value=${travel} onInput=${e=>setTravel(e.target.value)} placeholder="0"
+          class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
       </div>
       <div>
         <label class="block text-sm font-medium text-gray-700 mb-1">בונוס (₪)</label>
@@ -647,13 +619,10 @@ function BulkShiftForm({startDate,endDate,jobs,shifts,onSave,onDeleteRange,onMar
   const [eDate,     setEDate]     = useState(endDate||todayS());
   const [hours,     setHours]     = useState(8);
   const [travel,    setTravel]    = useState(0);
-  const [km,        setKm]        = useState('');
   const [skipExist, setSkipExist] = useState(true);
 
   const job      = findJob(jobs,jobId);
   const isMonthly= job&&job.rateType==='monthly';
-  const perKm    = job&&job.travelMode==='perKm';
-  const travelAmt= perKm ? Math.round((+km||0)*(job.travelRatePerKm||0)*100)/100 : (+travel||0);
   const range    = useMemo(()=>sDate&&eDate?dateRange(sDate,eDate):[], [sDate,eDate]);
   const existSet = useMemo(()=>new Set((shifts||[]).map(s=>s.date)), [shifts]);
   const toAdd    = range.filter(d=>!skipExist||!existSet.has(d));
@@ -664,7 +633,7 @@ function BulkShiftForm({startDate,endDate,jobs,shifts,onSave,onDeleteRange,onMar
     if(toAdd.length===0) return alert('אין תאריכים חדשים להוסיף בטווח זה');
     const newShifts=toAdd.map(d=>{
       const earn=isMonthly?0:(job?(job.rateType==='daily'?job.rate:job.rate*(+hours||0)):0);
-      return {id:genId(),jobId,date:d,hours:+hours||0,startTime:(job&&job.startTime)||'08:00',endTime:(job&&job.endTime)||'16:00',travel:travelAmt,km:perKm?(+km||0):undefined,bonus:0,isPaid:false,notes:'',earnings:earn};
+      return {id:genId(),jobId,date:d,hours:+hours||0,startTime:(job&&job.startTime)||'08:00',endTime:(job&&job.endTime)||'16:00',travel:+travel||0,bonus:0,isPaid:false,notes:'',earnings:earn};
     });
     onSave(newShifts); onClose();
   };
@@ -697,15 +666,9 @@ function BulkShiftForm({startDate,endDate,jobs,shifts,onSave,onDeleteRange,onMar
           class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
       </div>
       <div>
-        ${perKm?html`
-          <label class="block text-sm font-medium text-gray-700 mb-1">ק"מ יומי</label>
-          <input type="number" step="0.1" min="0" value=${km} onInput=${e=>setKm(e.target.value)} placeholder="0"
-            class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
-          <p class="text-xs text-gray-400 mt-1">${fmt(travelAmt)} ליום</p>`
-          :html`
-          <label class="block text-sm font-medium text-gray-700 mb-1">נסיעות יומי (₪)</label>
-          <input type="number" value=${travel} onInput=${e=>setTravel(e.target.value)} placeholder="0"
-            class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>`}
+        <label class="block text-sm font-medium text-gray-700 mb-1">נסיעות יומי (₪)</label>
+        <input type="number" value=${travel} onInput=${e=>setTravel(e.target.value)} placeholder="0"
+          class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
       </div>
     </div>`}
     <label class="flex items-center gap-2 cursor-pointer select-none">
