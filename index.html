@@ -1641,48 +1641,79 @@ function PayslipsPage({payslips,setPayslips,setShifts,setTab}) {
     });
   },[payslips]);
 
+  const COLORS=['#3B82F6','#8B5CF6','#10B981','#F59E0B','#EC4899','#14B8A6','#6366F1','#F43F5E'];
+
   return html`<div class="space-y-4">
-    <h2 class="text-base font-bold text-gray-800">🧾 תלושי שכר</h2>
+
+    <!-- Hero header -->
+    <div class="bg-gradient-to-l from-blue-600 to-indigo-600 rounded-2xl p-5 text-white shadow-md">
+      <div class="flex items-center justify-between">
+        <div class="min-w-0">
+          <div class="text-lg font-extrabold flex items-center gap-2">🧾 תלושי שכר</div>
+          <div class="text-xs text-blue-100 mt-1 leading-4">כל התלושים שלך במקום אחד,<br/>מגובים אוטומטית ב-Google Drive</div>
+        </div>
+        <div class="text-center flex-shrink-0 bg-white/15 rounded-2xl px-4 py-2">
+          <div class="text-3xl font-black leading-none">${payslips.length}</div>
+          <div class="text-[10px] text-blue-100 mt-1">תלושים</div>
+        </div>
+      </div>
+    </div>
 
     ${!token?html`
-      <div class="bg-amber-50 border border-amber-100 rounded-xl p-4 text-sm text-amber-700 text-center space-y-2">
-        <div>יש להתחבר לחשבון Google כדי לצרף ולשמור תלושים ב-Drive.</div>
-        <button onClick=${()=>setTab('settings')} class="bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-blue-600">עבור להגדרות</button>
+      <div class="bg-amber-50 border border-amber-100 rounded-2xl p-5 text-sm text-amber-700 text-center space-y-3">
+        <div class="text-4xl">🔒</div>
+        <div>כדי לצרף ולשמור תלושים צריך להתחבר לחשבון Google.</div>
+        <button onClick=${()=>setTab('settings')} class="bg-blue-500 text-white px-5 py-2.5 rounded-xl text-sm font-semibold hover:bg-blue-600 transition-colors">🔑 עבור להגדרות והתחבר</button>
       </div>`:html`
-      <div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm space-y-3">
-        <h3 class="text-sm font-semibold text-gray-700">הוסף תלוש</h3>
+      <!-- Add payslip card -->
+      <div class="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm space-y-3">
+        <h3 class="text-sm font-bold text-gray-700 flex items-center gap-2"><span>➕</span> הוסף תלוש חדש</h3>
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">חודש</label>
+          <label class="block text-xs font-medium text-gray-500 mb-1">חודש התלוש</label>
           <input type="month" value=${month} onChange=${e=>setMonth(e.target.value)} dir="ltr"
-            class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-blue-300"/>
+            class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-blue-300"/>
         </div>
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">קובץ (תמונה או PDF)</label>
-          <input type="file" accept="image/*,.pdf" onChange=${e=>setFile(e.target.files[0]||null)} class="w-full text-sm text-gray-600"/>
-        </div>
-        <button onClick=${upload} disabled=${busy}
-          class="w-full bg-blue-500 text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-blue-600 disabled:opacity-50 transition-colors">
-          ${busy?'מעלה...':'📤 העלה תלוש'}</button>
-        ${status&&html`<div class=${'text-xs text-center py-1.5 px-3 rounded-lg '+(status.includes('שגיאה')?'bg-red-50 text-red-600':'bg-blue-50 text-blue-700')}>${status}</div>`}
+        <label class="block border-2 border-dashed border-gray-200 rounded-xl p-5 text-center cursor-pointer hover:border-blue-300 hover:bg-blue-50 transition-colors">
+          <div class="text-3xl mb-1">${file?'✅':'📎'}</div>
+          <div class="text-sm text-gray-600 truncate px-2">${file?file.name:'לחץ לבחירת תמונה או PDF'}</div>
+          <input type="file" accept="image/*,.pdf" onChange=${e=>setFile(e.target.files[0]||null)} class="hidden"/>
+        </label>
+        <button onClick=${upload} disabled=${busy||!file}
+          class="w-full bg-gradient-to-l from-blue-600 to-indigo-600 text-white py-3 rounded-xl text-sm font-bold hover:opacity-90 disabled:opacity-40 transition-opacity shadow-sm">
+          ${busy?'⏳ מעלה...':'📤 העלה תלוש'}</button>
+        ${status&&html`<div class=${'text-xs text-center py-2 px-3 rounded-xl '+(status.includes('שגיאה')?'bg-red-50 text-red-600':'bg-emerald-50 text-emerald-700')}>${status}</div>`}
       </div>`}
 
+    <!-- List -->
     ${grouped.length===0?html`
-      <div class="text-center py-14 text-gray-400 bg-white rounded-xl border border-gray-100">
-        <div class="text-5xl mb-2">🧾</div>
-        <div class="font-medium">אין תלושים עדיין</div>
+      <div class="text-center py-16 text-gray-400 bg-white rounded-2xl border border-gray-100">
+        <div class="text-6xl mb-3">🗂️</div>
+        <div class="font-semibold text-gray-500">עדיין אין תלושים</div>
+        <div class="text-xs mt-1">התלושים שתעלה יופיעו כאן לפי חודשים</div>
       </div>`:
-      grouped.map(g=>html`<div key=${g.month} class="space-y-2">
-        <div class="text-xs font-semibold text-gray-400">${g.label}</div>
-        ${g.items.map(p=>html`<div key=${p.id} class="bg-white rounded-xl border border-gray-100 p-3 shadow-sm flex items-center gap-3">
-          <span class="text-2xl flex-shrink-0">📄</span>
-          <div class="flex-1 min-w-0">
-            <div class="text-sm font-medium text-gray-800">תלוש שכר · ${g.label}</div>
-            <div class="text-xs text-gray-400 truncate">${new Date(p.uploadedAt).toLocaleDateString('he-IL')} · ${p.name}</div>
+      html`<div class="space-y-4">
+        ${grouped.map((g,gi)=>html`<div key=${g.month} class="space-y-2">
+          <div class="flex items-center gap-2">
+            <span class="text-xs font-bold text-gray-500 bg-gray-100 rounded-full px-3 py-1">${g.label}</span>
+            <div class="flex-1 h-px bg-gray-100"/>
+            <span class="text-[10px] text-gray-400">${g.items.length} ${g.items.length===1?'קובץ':'קבצים'}</span>
           </div>
-          <a href=${p.driveLink} target="_blank" rel="noopener" class="flex-shrink-0 p-1.5 rounded hover:bg-blue-50 text-gray-400 hover:text-blue-500 text-base">🔗</a>
-          <button onClick=${()=>del(p)} class="flex-shrink-0 p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-red-500 text-base">🗑️</button>
+          ${g.items.map((p,pi)=>{const c=COLORS[(gi+pi)%COLORS.length];return html`
+            <div key=${p.id} class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex items-stretch">
+              <div class="w-1.5 flex-shrink-0" style=${{backgroundColor:c}}/>
+              <div class="flex items-center gap-3 p-3 flex-1 min-w-0">
+                <div class="w-11 h-11 rounded-xl flex items-center justify-center text-2xl flex-shrink-0" style=${{backgroundColor:c+'22'}}>📄</div>
+                <div class="flex-1 min-w-0">
+                  <div class="text-sm font-bold text-gray-800">תלוש ${g.label}</div>
+                  <div class="text-xs text-gray-400 truncate">הועלה ${new Date(p.uploadedAt).toLocaleDateString('he-IL')}</div>
+                </div>
+                <a href=${p.driveLink} target="_blank" rel="noopener"
+                  class="flex-shrink-0 bg-blue-50 text-blue-600 rounded-lg px-3 py-1.5 text-xs font-semibold hover:bg-blue-100 transition-colors">👁️ צפה</a>
+                <button onClick=${()=>del(p)} class="flex-shrink-0 p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 text-base">🗑️</button>
+              </div>
+            </div>`;})}
         </div>`)}
-      </div>`)}
+      </div>`}
   </div>`;
 }
 
