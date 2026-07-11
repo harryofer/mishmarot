@@ -1029,11 +1029,13 @@ function ShiftsPage({shifts,setShifts,jobs}) {
 }
 
 // ── DashboardPage ────────────────────────────────────────────
-function DashboardPage({shifts,jobs,settings}) {
+function DashboardPage({shifts,jobs,settings,payslips,setTab}) {
   const now=new Date();
   const [year,setYear]=useState(now.getFullYear());
   const [month,setMonth]=useState(now.getMonth());
   const today=todayS();
+  const monthKey=year+'-'+String(month+1).padStart(2,'0');
+  const monthPayslips=(payslips||[]).filter(p=>p.month===monthKey);
 
   const d=useMemo(()=>{
     const ms=shifts.filter(s=>{const[y,m]=s.date.split('-').map(Number);return y===year&&m===month+1;});
@@ -1136,6 +1138,19 @@ function DashboardPage({shifts,jobs,settings}) {
       <${StatCard} label="נטו משוער"      value=${fmt(d.nA.net)}     sub=${fmt(d.nA.total)+' ניכויים'}     color="green"  icon="✅"/>
       <${StatCard} label="שולם"           value=${fmt(d.paid)}       sub="סומן כשולם"                      color="purple" icon="✓"/>
       <${StatCard} label="ממתין לתשלום"  value=${fmt(d.pend)}       sub="טרם שולם"                         color="orange" icon="⏳"/>
+    </div>
+
+    <div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+      <div class="flex items-center justify-between mb-1">
+        <h3 class="text-sm font-semibold text-gray-700">🧾 תלוש שכר לחודש זה</h3>
+        <button onClick=${()=>setTab&&setTab('payslips')} class="text-xs text-blue-600 hover:underline">ניהול תלושים</button>
+      </div>
+      ${monthPayslips.length===0
+        ? html`<div class="text-xs text-gray-400">לא צורף תלוש לחודש זה — ניתן לצרף בלשונית "תלושים".</div>`
+        : monthPayslips.map(p=>html`<a key=${p.id} href=${p.driveLink} target="_blank" rel="noopener"
+            class="flex items-center gap-2 py-1.5 text-sm text-blue-700 hover:underline">
+            <span>📄</span><span class="truncate">${p.name}</span><span class="text-gray-300">🔗</span>
+          </a>`)}
     </div>
 
     ${shifts.length>0&&html`
@@ -1620,20 +1635,7 @@ function PayslipsPage({payslips,setPayslips,setTab}) {
 
 // ── SettingsPage ─────────────────────────────────────────────
 function SettingsPage({settings,setSettings,jobs,shifts,setJobs,setShifts,payslips,setPayslips}) {
-  const exp=()=>{
-    const data={jobs:JSON.parse(localStorage.getItem('sw_jobs')||'[]'),shifts:JSON.parse(localStorage.getItem('sw_shifts')||'[]'),payslips:JSON.parse(localStorage.getItem('sw_payslips')||'[]'),settings:JSON.parse(localStorage.getItem('sw_settings')||'{}')};
-    const a=document.createElement('a');
-    a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));
-    a.download='shifts_backup_'+todayS()+'.json'; a.click();
-  };
-  const imp=e=>{
-    const f=e.target.files[0]; if(!f) return;
-    const r=new FileReader();
-    r.onload=ev=>{ try { const d=JSON.parse(ev.target.result); if(d.jobs)setJobs(d.jobs); if(d.shifts)setShifts(d.shifts); if(d.payslips)setPayslips(d.payslips); if(d.settings)setSettings(d.settings); alert('יובא בהצלחה!'); } catch(err){alert('שגיאה: קובץ לא תקין');} };
-    r.readAsText(f); e.target.value='';
-  };
-  const clr=()=>{ if(!confirm('למחוק את כל הנתונים?')) return; setJobs([]); setShifts([]); alert('הנתונים נמחקו.'); };
-
+  const [showCalc,setShowCalc]=useState(false);
   const [notifPerm,setNotifPerm]=useState(window.Notification?Notification.permission:'unsupported');
   const n=(settings&&settings.notify)||{};
   const setN=(k,v)=>setSettings(s=>({...s,notify:{on:false,before:true,paid:true,worked:true,...(s.notify||{}),[k]:v}}));
@@ -1742,13 +1744,6 @@ function SettingsPage({settings,setSettings,jobs,shifts,setJobs,setShifts,paysli
       </div>
     </div>
 
-    <div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm space-y-2">
-      <h3 class="text-sm font-semibold text-gray-700 mb-2">גיבוי ושחזור מקומי</h3>
-      <button onClick=${exp} class="w-full text-sm bg-blue-50 text-blue-700 py-2 rounded-lg hover:bg-blue-100 font-medium">📤 ייצא גיבוי (JSON)</button>
-      <label class="block w-full text-sm bg-emerald-50 text-emerald-700 py-2 rounded-lg hover:bg-emerald-100 font-medium text-center cursor-pointer">
-        📥 ייבא גיבוי<input type="file" accept=".json" onChange=${imp} class="hidden"/>
-      </label>
-    </div>
     <div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
       <h3 class="text-sm font-semibold text-gray-700 mb-3">☁️ גיבוי Google Drive</h3>
       <${GoogleDriveSection}
@@ -1761,8 +1756,17 @@ function SettingsPage({settings,setSettings,jobs,shifts,setJobs,setShifts,paysli
       <${GoogleCalendarSection}
         jobs=${jobs} shifts=${shifts} setShifts=${setShifts}/>
     </div>
+
+    <div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+      <button onClick=${()=>setShowCalc(v=>!v)} class="w-full flex items-center justify-between">
+        <h3 class="text-sm font-semibold text-gray-700">🧮 מחשבון שכר נטו</h3>
+        <span class="text-gray-400 text-xs">${showCalc?'▲ הסתר':'▼ הצג'}</span>
+      </button>
+      ${showCalc&&html`<div class="mt-3"><${CalcPage} shifts=${shifts} jobs=${jobs} settings=${settings} setSettings=${setSettings}/></div>`}
+    </div>
+
     <div class="text-center text-xs text-gray-400 py-2 leading-5">
-      כל הנתונים שמורים ב-LocalStorage במכשיר זה בלבד.<br/>חישובי המס הם הערכות ואינם מהווים ייעוץ מקצועי.
+      הנתונים שמורים במכשיר וב-Google Drive.<br/>חישובי המס הם הערכות ואינם מהווים ייעוץ מקצועי.
     </div>
   </div>`;
 }
@@ -1850,11 +1854,31 @@ function App() {
 
   useReminders(shifts,settings,setShifts);
 
+  // Silent Google re-connect on load (runs regardless of active tab, so payslips/backup work immediately)
+  useEffect(()=>{
+    if(_gToken) return;
+    if(!settings||!settings.gConnected||!settings.gClientId) return;
+    let tries=0;
+    const iv=setInterval(()=>{
+      if(window.google&&window.google.accounts&&window.google.accounts.oauth2){
+        clearInterval(iv);
+        try{
+          window.google.accounts.oauth2.initTokenClient({
+            client_id:settings.gClientId.trim(),
+            scope:'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/calendar.events',
+            callback:r=>{ if(!r.error) _gToken=r.access_token; }
+          }).requestAccessToken({prompt:''});
+        }catch(e){}
+      } else if(++tries>25) clearInterval(iv);
+    },300);
+    return ()=>clearInterval(iv);
+  },[]);
+
   useEffect(()=>{
     document.body.className=darkMode?'bg-slate-50 dark min-h-screen':'bg-slate-50 min-h-screen';
   },[darkMode]);
 
-  const TABS=[{id:'dashboard',label:'דשבורד',icon:'📊'},{id:'shifts',label:'משמרות',icon:'📅'},{id:'jobs',label:'משרות',icon:'💼'},{id:'calc',label:'מחשבון',icon:'🧮'},{id:'payslips',label:'תלושים',icon:'🧾'},{id:'settings',label:'הגדרות',icon:'⚙️'}];
+  const TABS=[{id:'dashboard',label:'דשבורד',icon:'📊'},{id:'shifts',label:'משמרות',icon:'📅'},{id:'jobs',label:'משרות',icon:'💼'},{id:'payslips',label:'תלושים',icon:'🧾'},{id:'settings',label:'הגדרות',icon:'⚙️'}];
 
   return html`<div class=${'min-h-screen bg-slate-50 '+(darkMode?'dark':'')}>
     <header class="bg-white border-b border-gray-200 sticky top-0 z-40 shadow-sm">
@@ -1888,10 +1912,9 @@ function App() {
     </header>
     <main class="max-w-2xl mx-auto px-4 py-5">
       <div class="fade">
-        ${tab==='dashboard'&&html`<${DashboardPage} shifts=${shifts} jobs=${jobs} settings=${settings}/>`}
+        ${tab==='dashboard'&&html`<${DashboardPage} shifts=${shifts} jobs=${jobs} settings=${settings} payslips=${payslips} setTab=${setTab}/>`}
         ${tab==='shifts'   &&html`<${ShiftsPage}    shifts=${shifts} setShifts=${setShifts} jobs=${jobs}/>`}
         ${tab==='jobs'     &&html`<${JobsPage}       jobs=${jobs}    setJobs=${setJobs}/>`}
-        ${tab==='calc'     &&html`<${CalcPage}       shifts=${shifts} jobs=${jobs} settings=${settings} setSettings=${setSettings}/>`}
         ${tab==='payslips' &&html`<${PayslipsPage}   payslips=${payslips} setPayslips=${setPayslips} setTab=${setTab}/>`}
         ${tab==='settings' &&html`<${SettingsPage}   settings=${settings} setSettings=${setSettings} jobs=${jobs} shifts=${shifts} setJobs=${setJobs} setShifts=${setShifts} payslips=${payslips} setPayslips=${setPayslips}/>`}
       </div>
