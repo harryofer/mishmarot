@@ -1670,8 +1670,16 @@ function PayslipsPage({payslips,setPayslips,setShifts,setTab}) {
         <h3 class="text-sm font-bold text-gray-700 flex items-center gap-2"><span>➕</span> הוסף תלוש חדש</h3>
         <div>
           <label class="block text-xs font-medium text-gray-500 mb-1">חודש התלוש</label>
-          <input type="month" value=${month} onChange=${e=>setMonth(e.target.value)} dir="ltr"
-            class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-blue-300"/>
+          <div class="grid grid-cols-2 gap-2">
+            <select value=${month.slice(5,7)} onChange=${e=>setMonth(month.slice(0,4)+'-'+e.target.value)}
+              class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
+              ${MONTHS.map((l,i)=>{const v=String(i+1).padStart(2,'0');return html`<option key=${v} value=${v}>${l}</option>`;})}
+            </select>
+            <select value=${month.slice(0,4)} onChange=${e=>setMonth(e.target.value+'-'+month.slice(5,7))}
+              class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
+              ${Array.from({length:6},(_,i)=>{const y=String(new Date().getFullYear()-4+i);return html`<option key=${y} value=${y}>${y}</option>`;})}
+            </select>
+          </div>
         </div>
         <label class="block border-2 border-dashed border-gray-200 rounded-xl p-5 text-center cursor-pointer hover:border-blue-300 hover:bg-blue-50 transition-colors">
           <div class="text-3xl mb-1">${file?'✅':'📎'}</div>
