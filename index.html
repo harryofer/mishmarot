@@ -163,6 +163,24 @@ async function deleteGcalEvent(id){
       {method:'DELETE',headers:{Authorization:'Bearer '+_gToken}});
   }catch(e){}
 }
+async function uploadFileToDrive(file,meta){
+  const boundary='-------314159265358979323846';
+  const metaPart='--'+boundary+'\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n'+JSON.stringify(meta)+'\r\n';
+  const filePart='--'+boundary+'\r\nContent-Type: '+(file.type||'application/octet-stream')+'\r\n\r\n';
+  const endPart='\r\n--'+boundary+'--';
+  const body=new Blob([metaPart,filePart,file,endPart]);
+  const r=await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink',{
+    method:'POST',headers:{Authorization:'Bearer '+_gToken,'Content-Type':'multipart/related; boundary='+boundary},body});
+  const j=await r.json();
+  if(j.error) throw new Error(j.error.message||'שגיאת העלאה');
+  return j;
+}
+async function deleteDriveFile(id){
+  if(!id||!_gToken) return;
+  try{
+    await fetch('https://www.googleapis.com/drive/v3/files/'+id,{method:'DELETE',headers:{Authorization:'Bearer '+_gToken}});
+  }catch(e){}
+}
 
 // ── Tax (Israel 2025 estimate) ───────────────────────────────
 const BRACKETS  = [{l:7380,r:.10},{l:10620,r:.14},{l:17040,r:.20},{l:22440,r:.31},{l:46640,r:.35},{l:60130,r:.47},{l:1e9,r:.50}];
@@ -291,13 +309,15 @@ function JobForm({initial, onSave, onClose}) {
   const [hoursMode, setHoursMode] = useState((initial&&initial.hoursMode)||'fixed');
   const [jobStart,  setJobStart]  = useState((initial&&initial.startDate)||todayS());
   const [pensionMode,setPensionMode]=useState((initial&&initial.pensionMode)||'auto');
+  const [travelMode,setTravelMode]=useState((initial&&initial.travelMode)||'flat');
+  const [travelRate,setTravelRate]=useState((initial&&initial.travelRatePerKm!=null)?String(initial.travelRatePerKm):'1.8');
 
   const pensionFrom = addMonths(jobStart||todayS(),3);
 
   const submit = () => {
     if (!name.trim()) return alert('יש למלא שם משרה');
     if (!rate||+rate<=0) return alert('יש להזין תעריף תקין');
-    onSave({name:name.trim(),color,rateType:type,rate:+rate,startTime,endTime,hoursMode,startDate:jobStart,pensionMode});
+    onSave({name:name.trim(),color,rateType:type,rate:+rate,startTime,endTime,hoursMode,startDate:jobStart,pensionMode,travelMode,travelRatePerKm:+travelRate||0});
   };
   return html`<div class="space-y-4">
     <div>
@@ -364,6 +384,23 @@ function JobForm({initial, onSave, onClose}) {
       </div>
       ${pensionMode==='auto'&&html`<p class="text-xs text-gray-400 mt-1">לפי תאריך ההתחלה, ניכוי הפנסיה יתחיל מ־${pensionFrom}.</p>`}
     </div>
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-1">החזר נסיעות</label>
+      <div class="flex gap-2 mb-2">
+        ${[['flat','סכום קבוע ידני'],['perKm','לפי ק"מ נסועים']].map(([v,l])=>html`
+          <button key=${v} onClick=${()=>setTravelMode(v)}
+            class=${'flex-1 py-2 rounded-lg text-sm font-medium transition-colors '+(travelMode===v?'bg-blue-500 text-white':'bg-gray-100 text-gray-600 hover:bg-gray-200')}>
+            ${l}</button>`)}
+      </div>
+      ${travelMode==='perKm'?html`
+        <div>
+          <span class="block text-xs text-gray-400 mb-1">תעריף לק"מ (₪)</span>
+          <input type="number" step="0.1" min="0" value=${travelRate} onInput=${e=>setTravelRate(e.target.value)}
+            class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
+        </div>
+        <p class="text-xs text-gray-400 mt-1">בכל משמרת תזין כמות ק"מ נסועים, וההחזר יחושב אוטומטית.</p>`
+        :html`<p class="text-xs text-gray-400">בכל משמרת תזין את סכום ההחזר ידנית (כמו כיום).</p>`}
+    </div>
     <div class="flex gap-2 pt-1">
       <button onClick=${submit} class="flex-1 bg-blue-500 text-white py-2 rounded-lg text-sm font-semibold hover:bg-blue-600 transition-colors">שמור</button>
       <button onClick=${onClose} class="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg text-sm font-semibold hover:bg-gray-200 transition-colors">ביטול</button>
@@ -379,6 +416,7 @@ function ShiftForm({initial, jobs, shifts, onSave, onClose, onDelete}) {
   const [startTime,setStartTime]=useState((initial&&initial.startTime)||(jobInit&&jobInit.startTime)||'08:00');
   const [endTime,  setEndTime]  =useState((initial&&initial.endTime)  ||(jobInit&&jobInit.endTime)  ||'16:00');
   const [travel, setTravel] = useState(initial&&initial.travel!=null?initial.travel:0);
+  const [km,     setKm]     = useState(initial&&initial.km!=null?initial.km:'');
   const [bonus,  setBonus]  = useState(initial&&initial.bonus!=null?initial.bonus:0);
   const [isPaid, setIsPaid] = useState(initial&&initial.isPaid!=null?initial.isPaid:false);
   const [arrived,setArrived]= useState(initial&&initial.arrived!=null?initial.arrived:false);
@@ -398,12 +436,14 @@ function ShiftForm({initial, jobs, shifts, onSave, onClose, onDelete}) {
 
   const hours      = hoursBetween(startTime,endTime);
   const baseEarn   = isMonthly ? 0 : (job?(job.rateType==='daily'?job.rate:job.rate*hours):0);
-  const total      = baseEarn+(+travel||0)+(+bonus||0);
+  const perKm      = job && job.travelMode==='perKm';
+  const travelAmt  = perKm ? Math.round((+km||0)*(job.travelRatePerKm||0)*100)/100 : (+travel||0);
+  const total      = baseEarn+travelAmt+(+bonus||0);
 
   const submit = () => {
     if (!jobId) return alert('יש לבחור משרה');
     if (!date)  return alert('יש לבחור תאריך');
-    onSave({jobId,date,hours,startTime,endTime,travel:+travel||0,bonus:+bonus||0,isPaid,arrived,notes,earnings:baseEarn});
+    onSave({jobId,date,hours,startTime,endTime,travel:travelAmt,km:perKm?(+km||0):undefined,bonus:+bonus||0,isPaid,arrived,notes,earnings:baseEarn});
   };
 
   if (!jobs.length) return html`<div class="text-center py-8 text-gray-400">
@@ -447,9 +487,15 @@ function ShiftForm({initial, jobs, shifts, onSave, onClose, onDelete}) {
       </div>`}
     <div class="grid grid-cols-2 gap-3">
       <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">נסיעות (₪)</label>
-        <input type="number" value=${travel} onInput=${e=>setTravel(e.target.value)} placeholder="0"
-          class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
+        ${perKm?html`
+          <label class="block text-sm font-medium text-gray-700 mb-1">ק"מ נסועים</label>
+          <input type="number" step="0.1" min="0" value=${km} onInput=${e=>setKm(e.target.value)} placeholder="0"
+            class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
+          <p class="text-xs text-gray-400 mt-1">${fmt(travelAmt)} (${job.travelRatePerKm}₪ × ${km||0} ק"מ)</p>`
+          :html`
+          <label class="block text-sm font-medium text-gray-700 mb-1">נסיעות (₪)</label>
+          <input type="number" value=${travel} onInput=${e=>setTravel(e.target.value)} placeholder="0"
+            class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>`}
       </div>
       <div>
         <label class="block text-sm font-medium text-gray-700 mb-1">בונוס (₪)</label>
@@ -601,10 +647,13 @@ function BulkShiftForm({startDate,endDate,jobs,shifts,onSave,onDeleteRange,onMar
   const [eDate,     setEDate]     = useState(endDate||todayS());
   const [hours,     setHours]     = useState(8);
   const [travel,    setTravel]    = useState(0);
+  const [km,        setKm]        = useState('');
   const [skipExist, setSkipExist] = useState(true);
 
   const job      = findJob(jobs,jobId);
   const isMonthly= job&&job.rateType==='monthly';
+  const perKm    = job&&job.travelMode==='perKm';
+  const travelAmt= perKm ? Math.round((+km||0)*(job.travelRatePerKm||0)*100)/100 : (+travel||0);
   const range    = useMemo(()=>sDate&&eDate?dateRange(sDate,eDate):[], [sDate,eDate]);
   const existSet = useMemo(()=>new Set((shifts||[]).map(s=>s.date)), [shifts]);
   const toAdd    = range.filter(d=>!skipExist||!existSet.has(d));
@@ -615,7 +664,7 @@ function BulkShiftForm({startDate,endDate,jobs,shifts,onSave,onDeleteRange,onMar
     if(toAdd.length===0) return alert('אין תאריכים חדשים להוסיף בטווח זה');
     const newShifts=toAdd.map(d=>{
       const earn=isMonthly?0:(job?(job.rateType==='daily'?job.rate:job.rate*(+hours||0)):0);
-      return {id:genId(),jobId,date:d,hours:+hours||0,startTime:(job&&job.startTime)||'08:00',endTime:(job&&job.endTime)||'16:00',travel:+travel||0,bonus:0,isPaid:false,notes:'',earnings:earn};
+      return {id:genId(),jobId,date:d,hours:+hours||0,startTime:(job&&job.startTime)||'08:00',endTime:(job&&job.endTime)||'16:00',travel:travelAmt,km:perKm?(+km||0):undefined,bonus:0,isPaid:false,notes:'',earnings:earn};
     });
     onSave(newShifts); onClose();
   };
@@ -648,9 +697,15 @@ function BulkShiftForm({startDate,endDate,jobs,shifts,onSave,onDeleteRange,onMar
           class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
       </div>
       <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">נסיעות יומי (₪)</label>
-        <input type="number" value=${travel} onInput=${e=>setTravel(e.target.value)} placeholder="0"
-          class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
+        ${perKm?html`
+          <label class="block text-sm font-medium text-gray-700 mb-1">ק"מ יומי</label>
+          <input type="number" step="0.1" min="0" value=${km} onInput=${e=>setKm(e.target.value)} placeholder="0"
+            class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
+          <p class="text-xs text-gray-400 mt-1">${fmt(travelAmt)} ליום</p>`
+          :html`
+          <label class="block text-sm font-medium text-gray-700 mb-1">נסיעות יומי (₪)</label>
+          <input type="number" value=${travel} onInput=${e=>setTravel(e.target.value)} placeholder="0"
+            class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>`}
       </div>
     </div>`}
     <label class="flex items-center gap-2 cursor-pointer select-none">
@@ -1301,7 +1356,7 @@ function CalcPage({shifts,jobs,settings,setSettings}) {
 }
 
 // ── GoogleDriveSection ───────────────────────────────────────
-function GoogleDriveSection({settings,setSettings,jobs,shifts,setJobs,setShifts}) {
+function GoogleDriveSection({settings,setSettings,jobs,shifts,payslips,setJobs,setShifts,setPayslips}) {
   const [token,  setToken]  = useState(()=>_gToken);
   const [status, setStatus] = useState('');
   const [busy,   setBusy]   = useState(false);
@@ -1349,6 +1404,15 @@ function GoogleDriveSection({settings,setSettings,jobs,shifts,setJobs,setShifts}
     return ()=>clearInterval(iv);
   },[]);
 
+  // Auto-backup: debounced backup to Drive whenever jobs/shifts change (if enabled and connected)
+  const autoRef=useRef(null);
+  useEffect(()=>{
+    if(!token || !(settings&&settings.autoBackup)) return;
+    clearTimeout(autoRef.current);
+    autoRef.current=setTimeout(()=>{ backup(); }, 4000);
+    return ()=>clearTimeout(autoRef.current);
+  },[jobs,shifts,payslips,token]);
+
   const findFile = async () => {
     const q = encodeURIComponent("name='"+FILE+"' and trashed=false");
     const r = await fetch('https://www.googleapis.com/drive/v3/files?q='+q+'&fields=files(id)',
@@ -1361,7 +1425,7 @@ function GoogleDriveSection({settings,setSettings,jobs,shifts,setJobs,setShifts}
     if (!token) return;
     setBusy(true); setStatus('מגבה...');
     try {
-      const content = JSON.stringify({jobs,shifts,settings,exportedAt:new Date().toISOString()},null,2);
+      const content = JSON.stringify({jobs,shifts,payslips,settings,exportedAt:new Date().toISOString()},null,2);
       const existId = await findFile();
       if (existId) {
         await fetch('https://www.googleapis.com/upload/drive/v3/files/'+existId+'?uploadType=media',
@@ -1390,6 +1454,7 @@ function GoogleDriveSection({settings,setSettings,jobs,shifts,setJobs,setShifts}
       const d = await r.json();
       if (d.jobs)    setJobs(d.jobs);
       if (d.shifts)  setShifts(d.shifts);
+      if (d.payslips)setPayslips(d.payslips);
       if (d.settings){
         const {darkMode,gClientId,...rest}=d.settings;
         setSettings(s=>({...s,...rest}));
@@ -1418,7 +1483,11 @@ function GoogleDriveSection({settings,setSettings,jobs,shifts,setJobs,setShifts}
           <button onClick=${restore} disabled=${busy}
             class="bg-violet-500 text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-violet-600 disabled:opacity-50 transition-colors">
             ${busy?'...':'⬇️ שחזר מ-Drive'}</button>
-        </div>`
+        </div>
+        <label class="flex items-center justify-between cursor-pointer select-none pt-1">
+          <span class="text-sm text-gray-700">גיבוי אוטומטי בכל שינוי</span>
+          <input type="checkbox" checked=${!!(settings&&settings.autoBackup)} onChange=${e=>setSettings(s=>({...s,autoBackup:e.target.checked}))} class="w-4 h-4 rounded"/>
+        </label>`
       : html`<button onClick=${connect}
           class="w-full bg-blue-500 text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-blue-600 transition-colors">
           🔑 חבר חשבון Google</button>`}
@@ -1495,10 +1564,101 @@ function GoogleCalendarSection({jobs,shifts,setShifts}) {
   </div>`;
 }
 
+// ── PayslipsPage ─────────────────────────────────────────────
+function PayslipsPage({payslips,setPayslips,setTab}) {
+  const [token, setToken] = useState(()=>_gToken);
+  const [month, setMonth] = useState(()=>{const n=new Date();return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');});
+  const [file,  setFile]  = useState(null);
+  const [busy,  setBusy]  = useState(false);
+  const [status,setStatus]= useState('');
+
+  useEffect(()=>{
+    const iv=setInterval(()=>{ if(_gToken!==token) setToken(_gToken); },1000);
+    return ()=>clearInterval(iv);
+  },[token]);
+
+  const upload = async () => {
+    if(!token) return alert('יש להתחבר לחשבון Google תחילה (בהגדרות)');
+    if(!file) return alert('יש לבחור קובץ');
+    if(!month) return alert('יש לבחור חודש');
+    setBusy(true); setStatus('מעלה...');
+    try{
+      const meta={name:'תלוש_'+month+'_'+file.name, mimeType:file.type||'application/octet-stream'};
+      const res=await uploadFileToDrive(file,meta);
+      setPayslips(list=>[...list,{id:genId(),month,name:file.name,driveFileId:res.id,driveLink:res.webViewLink,uploadedAt:new Date().toISOString()}]);
+      setFile(null); setStatus('הועלה בהצלחה ✓');
+    }catch(e){ setStatus('שגיאה: '+e.message); }
+    setBusy(false);
+  };
+
+  const del = async (p) => {
+    if(!confirm('למחוק תלוש זה?')) return;
+    await deleteDriveFile(p.driveFileId);
+    setPayslips(list=>list.filter(x=>x.id!==p.id));
+  };
+
+  const grouped = useMemo(()=>{
+    const byMonth={};
+    payslips.forEach(p=>{ (byMonth[p.month]=byMonth[p.month]||[]).push(p); });
+    return Object.keys(byMonth).sort().reverse().map(m=>{
+      const [y,mo]=m.split('-').map(Number);
+      return {month:m,label:MONTHS[mo-1]+' '+y,items:byMonth[m].sort((a,b)=>a.uploadedAt<b.uploadedAt?1:-1)};
+    });
+  },[payslips]);
+
+  return html`<div class="space-y-4">
+    <h2 class="text-base font-bold text-gray-800">🧾 תלושי שכר</h2>
+
+    ${!token?html`
+      <div class="bg-amber-50 border border-amber-100 rounded-xl p-4 text-sm text-amber-700 text-center space-y-2">
+        <div>יש להתחבר לחשבון Google כדי לצרף ולשמור תלושים ב-Drive.</div>
+        <button onClick=${()=>setTab('settings')} class="bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-blue-600">עבור להגדרות</button>
+      </div>`:html`
+      <div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm space-y-3">
+        <h3 class="text-sm font-semibold text-gray-700">הוסף תלוש</h3>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">חודש</label>
+          <input type="month" value=${month} onChange=${e=>setMonth(e.target.value)}
+            class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">קובץ (תמונה או PDF)</label>
+          <input type="file" accept="image/*,.pdf" onChange=${e=>setFile(e.target.files[0]||null)} class="w-full text-sm text-gray-600"/>
+        </div>
+        <button onClick=${upload} disabled=${busy}
+          class="w-full bg-blue-500 text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-blue-600 disabled:opacity-50 transition-colors">
+          ${busy?'מעלה...':'📤 העלה תלוש'}</button>
+        ${status&&html`<div class=${'text-xs text-center py-1.5 px-3 rounded-lg '+(status.includes('שגיאה')?'bg-red-50 text-red-600':'bg-blue-50 text-blue-700')}>${status}</div>`}
+      </div>`}
+
+    ${grouped.length===0?html`
+      <div class="text-center py-14 text-gray-400 bg-white rounded-xl border border-gray-100">
+        <div class="text-5xl mb-2">🧾</div>
+        <div class="font-medium">אין תלושים עדיין</div>
+      </div>`:
+      grouped.map(g=>html`<div key=${g.month} class="space-y-2">
+        <div class="text-xs font-semibold text-gray-400">${g.label}</div>
+        ${g.items.map(p=>html`<div key=${p.id} class="bg-white rounded-xl border border-gray-100 p-3 shadow-sm flex items-center justify-between gap-2">
+          <div class="flex items-center gap-2 min-w-0">
+            <span class="text-xl flex-shrink-0">📄</span>
+            <div class="min-w-0">
+              <div class="text-sm font-medium text-gray-800 truncate">${p.name}</div>
+              <div class="text-xs text-gray-400">${new Date(p.uploadedAt).toLocaleDateString('he-IL')}</div>
+            </div>
+          </div>
+          <div class="flex items-center gap-1 flex-shrink-0">
+            <a href=${p.driveLink} target="_blank" rel="noopener" class="p-1.5 rounded hover:bg-blue-50 text-gray-400 hover:text-blue-500 text-sm">🔗</a>
+            <button onClick=${()=>del(p)} class="p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-red-500 text-sm">🗑️</button>
+          </div>
+        </div>`)}
+      </div>`)}
+  </div>`;
+}
+
 // ── SettingsPage ─────────────────────────────────────────────
-function SettingsPage({settings,setSettings,jobs,shifts,setJobs,setShifts}) {
+function SettingsPage({settings,setSettings,jobs,shifts,setJobs,setShifts,payslips,setPayslips}) {
   const exp=()=>{
-    const data={jobs:JSON.parse(localStorage.getItem('sw_jobs')||'[]'),shifts:JSON.parse(localStorage.getItem('sw_shifts')||'[]'),settings:JSON.parse(localStorage.getItem('sw_settings')||'{}')};
+    const data={jobs:JSON.parse(localStorage.getItem('sw_jobs')||'[]'),shifts:JSON.parse(localStorage.getItem('sw_shifts')||'[]'),payslips:JSON.parse(localStorage.getItem('sw_payslips')||'[]'),settings:JSON.parse(localStorage.getItem('sw_settings')||'{}')};
     const a=document.createElement('a');
     a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));
     a.download='shifts_backup_'+todayS()+'.json'; a.click();
@@ -1506,7 +1666,7 @@ function SettingsPage({settings,setSettings,jobs,shifts,setJobs,setShifts}) {
   const imp=e=>{
     const f=e.target.files[0]; if(!f) return;
     const r=new FileReader();
-    r.onload=ev=>{ try { const d=JSON.parse(ev.target.result); if(d.jobs)setJobs(d.jobs); if(d.shifts)setShifts(d.shifts); if(d.settings)setSettings(d.settings); alert('יובא בהצלחה!'); } catch(err){alert('שגיאה: קובץ לא תקין');} };
+    r.onload=ev=>{ try { const d=JSON.parse(ev.target.result); if(d.jobs)setJobs(d.jobs); if(d.shifts)setShifts(d.shifts); if(d.payslips)setPayslips(d.payslips); if(d.settings)setSettings(d.settings); alert('יובא בהצלחה!'); } catch(err){alert('שגיאה: קובץ לא תקין');} };
     r.readAsText(f); e.target.value='';
   };
   const clr=()=>{ if(!confirm('למחוק את כל הנתונים?')) return; setJobs([]); setShifts([]); alert('הנתונים נמחקו.'); };
@@ -1630,8 +1790,8 @@ function SettingsPage({settings,setSettings,jobs,shifts,setJobs,setShifts}) {
       <h3 class="text-sm font-semibold text-gray-700 mb-3">☁️ גיבוי Google Drive</h3>
       <${GoogleDriveSection}
         settings=${settings} setSettings=${setSettings}
-        jobs=${jobs} shifts=${shifts}
-        setJobs=${setJobs} setShifts=${setShifts}/>
+        jobs=${jobs} shifts=${shifts} payslips=${payslips}
+        setJobs=${setJobs} setShifts=${setShifts} setPayslips=${setPayslips}/>
     </div>
     <div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
       <h3 class="text-sm font-semibold text-gray-700 mb-3">📅 סנכרון ליומן Google</h3>
@@ -1714,6 +1874,7 @@ function useReminders(shifts,settings,setShifts){
 function App() {
   const [jobs,    setJobs]    =useLS('sw_jobs',    []);
   const [shifts,  setShifts]  =useLS('sw_shifts',  []);
+  const [payslips,setPayslips]=useLS('sw_payslips',[]);
   const [settings,setSettings]=useLS('sw_settings',{creditPoints:2.25,darkMode:false,gClientId:'365339624558-7t7arbt13od0i1frr0i3v0ernhsq6mhv.apps.googleusercontent.com'});
   const [tab,     setTab]     =useState('dashboard');
 
@@ -1730,7 +1891,7 @@ function App() {
     document.body.className=darkMode?'bg-slate-50 dark min-h-screen':'bg-slate-50 min-h-screen';
   },[darkMode]);
 
-  const TABS=[{id:'dashboard',label:'דשבורד',icon:'📊'},{id:'shifts',label:'משמרות',icon:'📅'},{id:'jobs',label:'משרות',icon:'💼'},{id:'calc',label:'מחשבון',icon:'🧮'},{id:'settings',label:'הגדרות',icon:'⚙️'}];
+  const TABS=[{id:'dashboard',label:'דשבורד',icon:'📊'},{id:'shifts',label:'משמרות',icon:'📅'},{id:'jobs',label:'משרות',icon:'💼'},{id:'calc',label:'מחשבון',icon:'🧮'},{id:'payslips',label:'תלושים',icon:'🧾'},{id:'settings',label:'הגדרות',icon:'⚙️'}];
 
   return html`<div class=${'min-h-screen bg-slate-50 '+(darkMode?'dark':'')}>
     <header class="bg-white border-b border-gray-200 sticky top-0 z-40 shadow-sm">
@@ -1768,7 +1929,8 @@ function App() {
         ${tab==='shifts'   &&html`<${ShiftsPage}    shifts=${shifts} setShifts=${setShifts} jobs=${jobs}/>`}
         ${tab==='jobs'     &&html`<${JobsPage}       jobs=${jobs}    setJobs=${setJobs}/>`}
         ${tab==='calc'     &&html`<${CalcPage}       shifts=${shifts} jobs=${jobs} settings=${settings} setSettings=${setSettings}/>`}
-        ${tab==='settings' &&html`<${SettingsPage}   settings=${settings} setSettings=${setSettings} jobs=${jobs} shifts=${shifts} setJobs=${setJobs} setShifts=${setShifts}/>`}
+        ${tab==='payslips' &&html`<${PayslipsPage}   payslips=${payslips} setPayslips=${setPayslips} setTab=${setTab}/>`}
+        ${tab==='settings' &&html`<${SettingsPage}   settings=${settings} setSettings=${setSettings} jobs=${jobs} shifts=${shifts} setJobs=${setJobs} setShifts=${setShifts} payslips=${payslips} setPayslips=${setPayslips}/>`}
       </div>
     </main>
   </div>`;
