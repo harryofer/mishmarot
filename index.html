@@ -347,6 +347,7 @@ function ShiftForm({initial, jobs, shifts, onSave, onClose, onDelete}) {
   const [travel, setTravel] = useState(initial&&initial.travel!=null?initial.travel:0);
   const [bonus,  setBonus]  = useState(initial&&initial.bonus!=null?initial.bonus:0);
   const [isPaid, setIsPaid] = useState(initial&&initial.isPaid!=null?initial.isPaid:false);
+  const [arrived,setArrived]= useState(initial&&initial.arrived!=null?initial.arrived:false);
   const [notes,  setNotes]  = useState((initial&&initial.notes)||'');
 
   const job        = findJob(jobs,jobId);
@@ -368,7 +369,7 @@ function ShiftForm({initial, jobs, shifts, onSave, onClose, onDelete}) {
   const submit = () => {
     if (!jobId) return alert('יש לבחור משרה');
     if (!date)  return alert('יש לבחור תאריך');
-    onSave({jobId,date,hours,startTime,endTime,travel:+travel||0,bonus:+bonus||0,isPaid,notes,earnings:baseEarn});
+    onSave({jobId,date,hours,startTime,endTime,travel:+travel||0,bonus:+bonus||0,isPaid,arrived,notes,earnings:baseEarn});
   };
 
   if (!jobs.length) return html`<div class="text-center py-8 text-gray-400">
@@ -432,6 +433,10 @@ function ShiftForm({initial, jobs, shifts, onSave, onClose, onDelete}) {
       <textarea rows="2" value=${notes} onInput=${e=>setNotes(e.target.value)} placeholder="אופציונלי..."
         class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 resize-none"></textarea>
     </div>
+    <label class="flex items-center gap-2 cursor-pointer">
+      <input type="checkbox" checked=${arrived} onChange=${e=>setArrived(e.target.checked)} class="w-4 h-4 rounded"/>
+      <span class="text-sm text-gray-700">הגעתי לעבודה ביום זה ✓</span>
+    </label>
     <label class="flex items-center gap-2 cursor-pointer">
       <input type="checkbox" checked=${isPaid} onChange=${e=>setIsPaid(e.target.checked)} class="w-4 h-4 rounded"/>
       <span class="text-sm text-gray-700">משמרת זו שולמה ✓</span>
@@ -789,7 +794,7 @@ function JobsPage({jobs,setJobs}) {
 }
 
 // ── DayModal (all shifts of a day + add) ─────────────────────
-function DayModal({date,shifts,jobs,onEditShift,onDeleteShift,onAddShift}) {
+function DayModal({date,shifts,jobs,onEditShift,onDeleteShift,onAddShift,onToggleArrived}) {
   const dayShifts=(shifts||[]).filter(s=>s.date===date);
   const dateLabel=new Date(date+'T12:00:00').toLocaleDateString('he-IL',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
   return html`<div class="space-y-3">
@@ -798,18 +803,23 @@ function DayModal({date,shifts,jobs,onEditShift,onDeleteShift,onAddShift}) {
       ? html`<div class="text-sm text-gray-400 text-center py-4">אין משמרות ביום זה</div>`
       : dayShifts.map(s=>{
           const job=findJob(jobs,s.jobId); const tot=s.earnings+(s.travel||0)+(s.bonus||0);
-          return html`<div key=${s.id} class="flex items-center justify-between border border-gray-100 rounded-lg p-2.5">
-            <div class="flex items-center gap-2 flex-1 cursor-pointer" onClick=${()=>onEditShift(s)}>
-              <div class="w-1 h-9 rounded-full flex-shrink-0" style=${{backgroundColor:(job&&job.color)||'#9CA3AF'}}/>
-              <div>
-                <div class="text-sm font-semibold text-gray-800">${(job&&job.name)||'לא ידוע'}</div>
-                <div class="text-xs text-gray-400">${s.hours>0?s.hours+' שע\' · ':''}${fmt(tot)}${s.isPaid?' · שולם ✓':''}</div>
+          return html`<div key=${s.id} class="border border-gray-100 rounded-lg p-2.5 space-y-2">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2 flex-1 cursor-pointer" onClick=${()=>onEditShift(s)}>
+                <div class="w-1 h-9 rounded-full flex-shrink-0" style=${{backgroundColor:(job&&job.color)||'#9CA3AF'}}/>
+                <div>
+                  <div class="text-sm font-semibold text-gray-800">${(job&&job.name)||'לא ידוע'}</div>
+                  <div class="text-xs text-gray-400">${s.hours>0?s.hours+' שע\' · ':''}${fmt(tot)}${s.isPaid?' · שולם ✓':''}${s.arrived?' · הגעת ✓':''}</div>
+                </div>
+              </div>
+              <div class="flex gap-1 flex-shrink-0">
+                <button onClick=${()=>onEditShift(s)}    class="p-1.5 rounded hover:bg-blue-50 text-gray-400 hover:text-blue-500">✏️</button>
+                <button onClick=${()=>onDeleteShift(s.id)} class="p-1.5 rounded hover:bg-red-50  text-gray-400 hover:text-red-500">🗑️</button>
               </div>
             </div>
-            <div class="flex gap-1 flex-shrink-0">
-              <button onClick=${()=>onEditShift(s)}    class="p-1.5 rounded hover:bg-blue-50 text-gray-400 hover:text-blue-500">✏️</button>
-              <button onClick=${()=>onDeleteShift(s.id)} class="p-1.5 rounded hover:bg-red-50  text-gray-400 hover:text-red-500">🗑️</button>
-            </div>
+            <button onClick=${()=>onToggleArrived&&onToggleArrived(s)}
+              class=${'w-full py-1.5 rounded-lg text-xs font-medium transition-colors '+(s.arrived?'bg-emerald-100 text-emerald-700':'border border-emerald-200 text-emerald-600 hover:bg-emerald-50')}>
+              ${s.arrived?'✓ הגעת לעבודה — הקש לביטול':'סמן שהגעת לעבודה'}</button>
           </div>`;
         })}
     <button onClick=${onAddShift} class="w-full bg-blue-500 text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-blue-600 transition-colors">➕ הוסף משמרת ליום זה</button>
@@ -905,6 +915,7 @@ function ShiftsPage({shifts,setShifts,jobs}) {
                     ${fut&&html`<span class="text-[10px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded-full">צפוי</span>`}
                     ${s.isPaid&&html`<span class="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full">שולם ✓</span>`}
                     ${!s.isPaid&&!fut&&html`<span class="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">ממתין</span>`}
+                    ${s.arrived&&html`<span class="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full">הגעת ✓</span>`}
                   </div>
                   <div class="text-xs text-gray-400">
                     ${new Date(s.date+'T12:00:00').toLocaleDateString('he-IL',{weekday:'short',day:'numeric',month:'long'})}
@@ -929,7 +940,8 @@ function ShiftsPage({shifts,setShifts,jobs}) {
       <${DayModal} date=${dayModal} shifts=${shifts} jobs=${jobs}
         onEditShift=${s=>{ setModal(s); setDayModal(null); }}
         onDeleteShift=${id=>{ if(confirm('למחוק משמרת זו?')) removeShifts(new Set([id])); }}
-        onAddShift=${()=>{ const dd=dayModal; setDayModal(null); setModal({prefillDate:dd}); }}/>
+        onAddShift=${()=>{ const dd=dayModal; setDayModal(null); setModal({prefillDate:dd}); }}
+        onToggleArrived=${s=>setShifts(arr=>arr.map(x=>x.id===s.id?{...x,arrived:!x.arrived}:x))}/>
     <//>`}
 
     ${deleteModal&&html`<${Modal} title="מחיקה מרובה לפי טווח תאריכים" onClose=${()=>setDeleteModal(false)}>
@@ -1485,16 +1497,24 @@ function SettingsPage({settings,setSettings,jobs,shifts,setJobs,setShifts}) {
               <input type="checkbox" checked=${n.on!==false} onChange=${e=>setN('on',e.target.checked)} class="w-4 h-4 rounded"/>
             </label>
             ${n.on!==false&&html`
-              <div class="space-y-2 pr-1 border-r-2 border-gray-100">
-                ${[['before','📅 תזכורת יום לפני עבודה'],['paid','💰 תזכורת לסמן משמרות ששולמו'],['worked','✅ תזכורת לאשר שעבדת ביום מסומן']]
-                  .map(([k,l])=>html`
-                    <label key=${k} class="flex items-center justify-between cursor-pointer select-none pr-2">
-                      <span class="text-sm text-gray-600">${l}</span>
-                      <input type="checkbox" checked=${n[k]!==false} onChange=${e=>setN(k,e.target.checked)} class="w-4 h-4 rounded"/>
-                    </label>`)}
+              <div class="space-y-3 pr-1 border-r-2 border-gray-100">
+                ${[['before','📅 יום לפני עבודה','beforeTime','20:00'],['paid','💰 לסמן משמרות ששולמו','paidTime','10:00'],['worked','✅ לאשר הגעה לעבודה','workedTime','18:00']]
+                  .map(([k,l,tk,td])=>html`
+                    <div key=${k} class="space-y-1 pr-2">
+                      <label class="flex items-center justify-between cursor-pointer select-none">
+                        <span class="text-sm text-gray-600">${l}</span>
+                        <input type="checkbox" checked=${n[k]!==false} onChange=${e=>setN(k,e.target.checked)} class="w-4 h-4 rounded"/>
+                      </label>
+                      ${n[k]!==false&&html`
+                        <div class="flex items-center justify-between pr-4">
+                          <span class="text-xs text-gray-400">שעת שליחה</span>
+                          <input type="time" value=${n[tk]||td} onChange=${e=>setN(tk,e.target.value)}
+                            class="border border-gray-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-300"/>
+                        </div>`}
+                    </div>`)}
               </div>`}`}
       <div class="text-[11px] text-gray-400 bg-slate-50 rounded-lg p-2 leading-4">
-        ℹ️ ההתראות מופיעות כשהאפליקציה פתוחה או כשפותחים אותה. באייפון נדרש להוסיף את האתר למסך הבית תחילה.
+        ℹ️ ההתראה תופיע בפעם הראשונה שהאפליקציה פתוחה אחרי השעה שנקבעה (פעם ביום). בתזכורת "אישור הגעה" אפשר להקיש על ההתראה כדי לסמן שהגעת. באייפון נדרש להוסיף את האתר למסך הבית תחילה.
       </div>
     </div>
 
@@ -1524,45 +1544,56 @@ function SettingsPage({settings,setSettings,jobs,shifts,setJobs,setShifts}) {
 }
 
 // ── Reminders (fire when app is open/foregrounded) ───────────
-function fireNote(title,body){
+function fireNote(title,body,onClick){
   try{
     if(window.Notification&&Notification.permission==='granted'){
-      new Notification(title,{body});
+      const nt=new Notification(title,{body});
+      if(onClick) nt.onclick=()=>{ try{window.focus();}catch(e){} onClick(); try{nt.close();}catch(e){} };
       return true;
     }
   }catch(e){}
   return false;
 }
-function useReminders(shifts,settings){
+function useReminders(shifts,settings,setShifts){
   useEffect(()=>{
     const n=(settings&&settings.notify)||{};
     if(!n.on) return;
     if(!window.Notification||Notification.permission!=='granted') return;
     const run=()=>{
       const today=todayS();
+      const now=new Date();
+      const hm=String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
+      const due=t=>hm>=(t||'00:00');
       const dt=new Date(today+'T12:00:00'); dt.setDate(dt.getDate()+1);
       const tmr=dt.toISOString().slice(0,10);
       let log={}; try{log=JSON.parse(localStorage.getItem('sw_notified')||'{}');}catch(e){}
       const mark=k=>{ log[k]=today; try{localStorage.setItem('sw_notified',JSON.stringify(log));}catch(e){} };
-      if(n.before!==false && log.before!==today){
+      if(n.before!==false && due(n.beforeTime||'20:00') && log.before!==today){
         const t=shifts.filter(s=>s.date===tmr);
         if(t.length){ if(fireNote('תזכורת עבודה 📅','יש לך '+t.length+' משמרות מחר')) mark('before'); }
       }
-      if(n.paid!==false && log.paid!==today){
+      if(n.paid!==false && due(n.paidTime||'10:00') && log.paid!==today){
         const unpaid=shifts.filter(s=>s.date<today&&!s.isPaid);
         if(unpaid.length){ if(fireNote('תזכורת תשלום 💰','יש '+unpaid.length+' משמרות שטרם סומנו כשולם')) mark('paid'); }
       }
-      if(n.worked!==false && log.worked!==today){
+      if(n.worked!==false && due(n.workedTime||'18:00') && log.worked!==today){
         const tod=shifts.filter(s=>s.date===today);
-        if(tod.length){ if(fireNote('אישור עבודה ✅','אל תשכח לסמן שעבדת היום ('+tod.length+' משמרות)')) mark('worked'); }
+        if(tod.length){
+          const ok=fireNote('אישור הגעה ✅','הגעת היום לעבודה? הקש כאן לסימון ('+tod.length+' משמרות)',()=>{
+            const ids=new Set(tod.map(s=>s.id));
+            setShifts&&setShifts(arr=>arr.map(x=>ids.has(x.id)?{...x,arrived:true}:x));
+            try{alert('סומן: הגעת לעבודה היום ✓');}catch(e){}
+          });
+          if(ok) mark('worked');
+        }
       }
     };
     run();
     const onVis=()=>{ if(document.visibilityState==='visible') run(); };
     document.addEventListener('visibilitychange',onVis);
-    const iv=setInterval(run,30*60*1000);
+    const iv=setInterval(run,10*60*1000);
     return ()=>{ document.removeEventListener('visibilitychange',onVis); clearInterval(iv); };
-  },[shifts,settings]);
+  },[shifts,settings,setShifts]);
 }
 
 // ── App ──────────────────────────────────────────────────────
@@ -1579,7 +1610,7 @@ function App() {
   _privacy=privacy;
   const togglePrivacy=()=>setSettings(s=>({...s,privacy:!s.privacy}));
 
-  useReminders(shifts,settings);
+  useReminders(shifts,settings,setShifts);
 
   useEffect(()=>{
     document.body.className=darkMode?'bg-slate-50 dark min-h-screen':'bg-slate-50 min-h-screen';
