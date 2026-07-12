@@ -1084,17 +1084,15 @@ function ShiftsPage({shifts,setShifts,jobs}) {
 
   return html`<div class="space-y-4">
     <div class="flex items-center justify-end flex-wrap gap-2">
-      <div class="flex items-center gap-2">
-        <div class="flex rounded-lg border border-gray-200 overflow-hidden">
-          ${[['calendar','calendar','לוח'],['list','list','רשימה']].map(([v,ic,l])=>html`
-            <button key=${v} onClick=${()=>setView(v)}
-              class=${'px-3 py-1.5 text-xs font-medium transition-colors flex items-center gap-1 whitespace-nowrap flex-shrink-0 '+(view===v?'bg-blue-500 text-white':'text-gray-600 hover:bg-gray-50')}>
-              <${Icon} name=${ic} size=${13}/><span>${l}</span></button>`)}
-        </div>
-        <button onClick=${()=>setBulkModal({startDate:null,endDate:null})} class="bg-blue-500 text-white px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-blue-600 transition-colors">+ משמרת</button>
-        <button onClick=${markMonthPaid} class="bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-emerald-600 transition-colors">✓ סמן חודש כשולם</button>
-        <button onClick=${()=>setDeleteModal(true)} class="bg-red-500 text-white px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-red-600 transition-colors flex items-center gap-1"><${Icon} name="trash" size=${13}/> מחיקה מרובה</button>
+      <div class="flex rounded-lg border border-gray-200 overflow-hidden flex-shrink-0">
+        ${[['calendar','calendar','לוח'],['list','list','רשימה']].map(([v,ic,l])=>html`
+          <button key=${v} onClick=${()=>setView(v)}
+            class=${'px-3 py-1.5 text-xs font-medium transition-colors flex items-center gap-1 whitespace-nowrap '+(view===v?'bg-blue-500 text-white':'text-gray-600 hover:bg-gray-50')}>
+            <${Icon} name=${ic} size=${13}/><span>${l}</span></button>`)}
       </div>
+      <button onClick=${()=>setBulkModal({startDate:null,endDate:null})} class="bg-blue-500 text-white px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-blue-600 transition-colors flex-shrink-0 whitespace-nowrap">+ משמרת</button>
+      <button onClick=${markMonthPaid} class="bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-emerald-600 transition-colors flex-shrink-0 whitespace-nowrap">✓ סמן חודש כשולם</button>
+      <button onClick=${()=>setDeleteModal(true)} class="bg-red-500 text-white px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-red-600 transition-colors flex items-center gap-1 flex-shrink-0 whitespace-nowrap"><${Icon} name="trash" size=${13}/> מחיקה מרובה</button>
     </div>
     <${MonthStrip} year=${year} month=${month} onChange=${(y,m)=>{setYear(y);setMonth(m);}}/>
 
