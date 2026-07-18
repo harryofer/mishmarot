@@ -164,9 +164,12 @@ function dateRange(a,b) {
   return out;
 }
 
-// Module-level Google token (survives tab switches, clears on page reload)
+// Module-level Google token. Persisted (short-lived, <1h) so reopening the app stays signed in.
 let _gToken = null;
 let _gClient = null;
+try{ const s=JSON.parse(localStorage.getItem('sw_gtok')||'null'); if(s&&s.t&&s.exp>Date.now()) _gToken=s.t; }catch(e){}
+function saveGTok(t){ _gToken=t; try{ localStorage.setItem('sw_gtok',JSON.stringify({t,exp:Date.now()+55*60*1000})); }catch(e){} }
+function clearGTok(){ _gToken=null; try{ localStorage.removeItem('sw_gtok'); }catch(e){} }
 // Calendar deletions are queued so they survive missing/expired tokens and retry later
 function enqueueGcalDel(ids){
   try{
@@ -1630,7 +1633,7 @@ function GoogleDriveSection({settings,setSettings,jobs,shifts,payslips,setJobs,s
   const SCOPE    = 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/calendar.events';
   const FILE     = 'shifts_backup.json';
 
-  const setTok = t => { _gToken=t; setToken(t); };
+  const setTok = t => { if(t) saveGTok(t); else clearGTok(); setToken(t); };
   const gReady = () => window.google&&window.google.accounts&&window.google.accounts.oauth2;
 
   const getClient = () => {
@@ -2208,24 +2211,32 @@ function App() {
 
   useReminders(shifts,settings,setShifts);
 
-  // Silent Google re-connect on load (runs regardless of active tab, so payslips/backup work immediately)
+  // Auto Google sign-in on load: (1) reuse saved token, (2) silent attempt,
+  // (3) fallback on first user tap (browsers allow the OAuth popup only on a user gesture)
   useEffect(()=>{
-    if(_gToken) return;
     if(!settings||!settings.gConnected||!settings.gClientId) return;
+    const silent=()=>{
+      if(_gToken) return;
+      try{
+        window.google.accounts.oauth2.initTokenClient({
+          client_id:settings.gClientId.trim(),
+          scope:'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/calendar.events',
+          callback:r=>{ if(!r.error){ saveGTok(r.access_token); processGcalDelQueue(); } }
+        }).requestAccessToken({prompt:''});
+      }catch(e){}
+    };
     let tries=0;
     const iv=setInterval(()=>{
       if(window.google&&window.google.accounts&&window.google.accounts.oauth2){
-        clearInterval(iv);
-        try{
-          window.google.accounts.oauth2.initTokenClient({
-            client_id:settings.gClientId.trim(),
-            scope:'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/calendar.events',
-            callback:r=>{ if(!r.error){ _gToken=r.access_token; processGcalDelQueue(); } }
-          }).requestAccessToken({prompt:''});
-        }catch(e){}
+        clearInterval(iv); if(!_gToken) silent();
       } else if(++tries>25) clearInterval(iv);
     },300);
-    return ()=>clearInterval(iv);
+    const onTap=()=>{
+      window.removeEventListener('pointerdown',onTap);
+      if(!_gToken&&window.google&&window.google.accounts&&window.google.accounts.oauth2) silent();
+    };
+    window.addEventListener('pointerdown',onTap);
+    return ()=>{ clearInterval(iv); window.removeEventListener('pointerdown',onTap); };
   },[]);
 
   useEffect(()=>{
