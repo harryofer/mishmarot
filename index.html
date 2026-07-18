@@ -167,8 +167,10 @@ function dateRange(a,b) {
 // Module-level Google token. Persisted (short-lived, <1h) so reopening the app stays signed in.
 let _gToken = null;
 let _gClient = null;
-try{ const s=JSON.parse(localStorage.getItem('sw_gtok')||'null'); if(s&&s.t&&s.exp>Date.now()) _gToken=s.t; }catch(e){}
-function saveGTok(t){ _gToken=t; try{ localStorage.setItem('sw_gtok',JSON.stringify({t,exp:Date.now()+55*60*1000})); }catch(e){} }
+// Token is short-lived (<1h) and drive.file+calendar scoped only; persisted over HTTPS so reopening stays signed in.
+const _gPersist = location.protocol==='https:';
+try{ const s=JSON.parse(localStorage.getItem('sw_gtok')||'null'); if(s&&typeof s.t==='string'&&s.exp>Date.now()) _gToken=s.t; }catch(e){}
+function saveGTok(t){ _gToken=t; if(!_gPersist) return; try{ localStorage.setItem('sw_gtok',JSON.stringify({t,exp:Date.now()+55*60*1000})); }catch(e){} }
 function clearGTok(){ _gToken=null; try{ localStorage.removeItem('sw_gtok'); }catch(e){} }
 // Calendar deletions are queued so they survive missing/expired tokens and retry later
 function enqueueGcalDel(ids){
@@ -184,7 +186,7 @@ async function processGcalDelQueue(){
   const remaining=[];
   for(const id of q){
     try{
-      const r=await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events/'+id,
+      const r=await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events/'+encodeURIComponent(id),
         {method:'DELETE',headers:{Authorization:'Bearer '+_gToken}});
       if(!(r.ok||r.status===404||r.status===410)) remaining.push(id);
     }catch(e){ remaining.push(id); }
@@ -211,7 +213,7 @@ async function uploadFileToDrive(file,meta){
 async function deleteDriveFile(id){
   if(!id||!_gToken) return;
   try{
-    await fetch('https://www.googleapis.com/drive/v3/files/'+id,{method:'DELETE',headers:{Authorization:'Bearer '+_gToken}});
+    await fetch('https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(id),{method:'DELETE',headers:{Authorization:'Bearer '+_gToken}});
   }catch(e){}
 }
 
@@ -1378,7 +1380,7 @@ function DashboardPage({shifts,setShifts,jobs,settings,payslips,setTab}) {
     return 'סיכום עבודה '+nameStr+'- '+sharePeriod()+'\nימי עבודה - '+list.length;
   };
   const shareWhatsApp=()=>{
-    window.open('https://wa.me/?text='+encodeURIComponent(shareText()),'_blank');
+    window.open('https://wa.me/?text='+encodeURIComponent(shareText()),'_blank','noopener,noreferrer');
   };
   const exportExcel=async()=>{
     const rows=shareList();
@@ -1388,7 +1390,8 @@ function DashboardPage({shifts,setShifts,jobs,settings,payslips,setTab}) {
       const job=findJob(jobs,s.jobId);
       const dow=new Date(s.date+'T12:00:00').toLocaleDateString('he-IL',{weekday:'long'});
       const cells=[(job&&job.name)||'',dow,s.date];
-      tbl+='<tr>'+cells.map(c=>'<td>'+escapeHtml(c)+'</td>').join('')+'</tr>';
+      // escapeHtml blocks markup injection; the leading-quote guard blocks Excel formula injection (=,+,-,@)
+      tbl+='<tr>'+cells.map(c=>{const s2=String(c);return '<td>'+escapeHtml(/^[=+\-@]/.test(s2)?"'"+s2:s2)+'</td>';}).join('')+'</tr>';
     });
     tbl+='</table>';
     const content='<html><head><meta charset="utf-8"></head><body>'+tbl+'</body></html>';
@@ -1723,7 +1726,7 @@ function GoogleDriveSection({settings,setSettings,jobs,shifts,payslips,setJobs,s
       const content = JSON.stringify({jobs,shifts,payslips,settings,exportedAt:new Date().toISOString()},null,2);
       const existId = await findFile();
       if (existId) {
-        await fetch('https://www.googleapis.com/upload/drive/v3/files/'+existId+'?uploadType=media',
+        await fetch('https://www.googleapis.com/upload/drive/v3/files/'+encodeURIComponent(existId)+'?uploadType=media',
           {method:'PATCH',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:content});
       } else {
         const b='--BOUND', meta=JSON.stringify({name:FILE,mimeType:'application/json'});
@@ -1744,12 +1747,14 @@ function GoogleDriveSection({settings,setSettings,jobs,shifts,payslips,setJobs,s
     try {
       const id = await findFile();
       if (!id) { setStatus('לא נמצא קובץ גיבוי ב-Drive'); setBusy(false); return; }
-      const r = await fetch('https://www.googleapis.com/drive/v3/files/'+id+'?alt=media',
+      const r = await fetch('https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(id)+'?alt=media',
         {headers:{Authorization:'Bearer '+token}});
       const d = await r.json();
+      const idOk=v=>typeof v==='string'&&/^[A-Za-z0-9_-]+$/.test(v);
       if (Array.isArray(d.jobs))    setJobs(d.jobs.filter(j=>j&&typeof j==='object'));
-      if (Array.isArray(d.shifts))  setShifts(d.shifts.filter(s=>s&&typeof s==='object'&&typeof s.date==='string'));
-      if (Array.isArray(d.payslips))setPayslips(d.payslips.filter(p=>p&&typeof p==='object'&&safeUrl(p.driveLink)));
+      if (Array.isArray(d.shifts))  setShifts(d.shifts.filter(s=>s&&typeof s==='object'&&typeof s.date==='string')
+        .map(s=>idOk(s.gcalId)?s:{...s,gcalId:undefined}));
+      if (Array.isArray(d.payslips))setPayslips(d.payslips.filter(p=>p&&typeof p==='object'&&safeUrl(p.driveLink)&&idOk(p.driveFileId)));
       if (d.settings&&typeof d.settings==='object'){
         const {darkMode,gClientId,gConnected,...rest}=d.settings;
         setSettings(s=>({...s,...rest}));
@@ -1816,7 +1821,7 @@ function GoogleCalendarSection({jobs,shifts,setShifts}) {
     };
     const base='https://www.googleapis.com/calendar/v3/calendars/primary/events';
     if(s.gcalId){
-      const r=await fetch(base+'/'+s.gcalId,
+      const r=await fetch(base+'/'+encodeURIComponent(s.gcalId),
         {method:'PATCH',headers:{Authorization:'Bearer '+_gToken,'Content-Type':'application/json'},body:JSON.stringify(body)});
       if(r.ok){ const j=await r.json(); return j.id; }
     }
@@ -1864,7 +1869,7 @@ function GoogleCalendarSection({jobs,shifts,setShifts}) {
       }while(pageToken);
       const orphans=items.filter(ev=>ev.summary&&(ev.summary.indexOf('עבודה')===0||ev.summary==='מילואים')&&!known.has(ev.id));
       for(const ev of orphans){
-        await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events/'+ev.id,
+        await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events/'+encodeURIComponent(ev.id),
           {method:'DELETE',headers:{Authorization:'Bearer '+_gToken}});
       }
       setStatus('סונכרן ✓ · נוספו/עודכנו '+list.length+' · הוסרו '+orphans.length);
@@ -1907,12 +1912,16 @@ function PayslipsPage({payslips,setPayslips,setShifts,setTab}) {
   const upload = async () => {
     if(!token) return alert('יש להתחבר לחשבון Google תחילה (בהגדרות)');
     if(!file) return alert('יש לבחור קובץ');
-    if(!month) return alert('יש לבחור חודש');
+    if(!/^\d{4}-\d{2}$/.test(month)) return alert('יש לבחור חודש');
+    const okType=(file.type||'').startsWith('image/')||file.type==='application/pdf';
+    if(!okType) return alert('ניתן להעלות רק תמונה או קובץ PDF');
+    if(file.size>15*1024*1024) return alert('הקובץ גדול מדי (מקסימום 15MB)');
     setBusy(true); setStatus('מעלה...');
     try{
       const meta={name:'תלוש_'+month+'_'+file.name, mimeType:file.type||'application/octet-stream'};
       const res=await uploadFileToDrive(file,meta);
-      setPayslips(list=>[...list,{id:genId(),month,name:file.name,driveFileId:res.id,driveLink:res.webViewLink,uploadedAt:new Date().toISOString()}]);
+      const link=safeUrl(res.webViewLink)||('https://drive.google.com/file/d/'+encodeURIComponent(res.id)+'/view');
+      setPayslips(list=>[...list,{id:genId(),month,name:file.name,driveFileId:res.id,driveLink:link,uploadedAt:new Date().toISOString()}]);
       // Uploading a payslip for a month marks that month's shifts as paid
       setShifts&&setShifts(arr=>arr.map(s=>s.date.slice(0,7)===month?{...s,isPaid:true}:s));
       setFile(null); setStatus('הועלה בהצלחה ✓ — משמרות החודש סומנו כשולם');
