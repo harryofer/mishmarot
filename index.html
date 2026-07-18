@@ -142,7 +142,7 @@ const html = htm.bind(h);
 // ── Constants ────────────────────────────────────────────────
 const MONTHS = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
 const DAYS   = ['א׳','ב׳','ג׳','ד׳','ה׳','ו׳','ש׳'];
-const COLORS = ['#3B82F6','#10B981','#8B5CF6','#EF4444','#F97316','#EC4899','#14B8A6','#6366F1','#F59E0B','#84CC16','#06B6D4','#F43F5E'];
+const COLORS = ['#3B82F6','#10B981','#8B5CF6','#EF4444','#F97316','#EC4899','#14B8A6','#6366F1','#F59E0B','#84CC16','#06B6D4','#F43F5E','#4B5320'];
 
 // ── Helpers ──────────────────────────────────────────────────
 const genId   = () => Date.now().toString(36) + Math.random().toString(36).slice(2,5);
@@ -419,8 +419,20 @@ function JobForm({initial, shifts, onSave, onClose}) {
 
   const pensionFrom = addMonths(jobStart||todayS(),3);
 
+  // Miluim: daily tagmul auto-computed from the last 3 months' gross / 90, clamped to BL min/max
+  const miluimRate = () => {
+    const cutoff=addMonths(todayS(),-3);
+    const gross=(shifts||[]).filter(s=>s.date>=cutoff&&s.date<todayS()).reduce((n,s)=>n+s.earnings+(s.travel||0)+(s.bonus||0),0);
+    return Math.round(Math.min(MILUIM_MAX_DAY,Math.max(MILUIM_MIN_DAY,gross/90)));
+  };
+
   const submit = () => {
     if (!name.trim()) return alert('יש למלא שם משרה');
+    if (type==='miluim') {
+      onSave({name:name.trim(),color,rateType:'miluim',rate:miluimRate(),
+        startTime:'08:00',endTime:'16:00',hoursMode:'fixed',startDate:jobStart,pensionMode:'never',travelPerDay:0});
+      return;
+    }
     if (!rate||+rate<=0) return alert('יש להזין תעריף תקין');
     onSave({name:name.trim(),color,rateType:type,rate:+rate,startTime,endTime,hoursMode,startDate:jobStart,pensionMode,travelPerDay:+travelDay||0});
   };
@@ -438,8 +450,8 @@ function JobForm({initial, shifts, onSave, onClose}) {
       <label class="block text-sm font-medium text-gray-700 mb-1">סוג תעריף</label>
       <div class="flex gap-2">
         ${[['daily','יומי'],['hourly','שעתי'],['monthly','חודשי'],['miluim','מילואים']].map(([v,l])=>html`
-          <button key=${v} onClick=${()=>{setType(v); if(v==='miluim') setColor(MILUIM_COLOR);}}
-            class=${'flex-1 py-2 rounded-lg text-sm font-medium transition-colors '+(type===v
+          <button key=${v} onClick=${()=>{setType(v); if(v==='miluim'){setColor(MILUIM_COLOR); if(!name.trim())setName('מילואים');}}}
+            class=${'flex-1 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap '+(type===v
               ?(v==='miluim'?'text-white':'bg-blue-500 text-white')
               :'bg-gray-100 text-gray-600 hover:bg-gray-200')}
             style=${type===v&&v==='miluim'?{backgroundColor:MILUIM_COLOR}:null}>
@@ -448,29 +460,22 @@ function JobForm({initial, shifts, onSave, onClose}) {
     </div>
     ${type==='miluim'&&html`
       <div class="rounded-lg p-3 text-xs leading-5 border" style=${{backgroundColor:MILUIM_COLOR+'15',borderColor:MILUIM_COLOR+'44',color:'#3d451f'}}>
-        <div class="font-semibold mb-1" style=${{color:MILUIM_COLOR}}>שירות מילואים</div>
-        התגמול היומי מביטוח לאומי = השכר ברוטו של 3 החודשים האחרונים ÷ 90,
+        <div class="font-semibold mb-1" style=${{color:MILUIM_COLOR}}>שירות מילואים — הכל אוטומטי</div>
+        התגמול היומי מחושב לבד לפי כלל ביטוח לאומי: השכר ברוטו של 3 החודשים האחרונים ÷ 90,
         לא פחות מ־${fmt(MILUIM_MIN_DAY)} ולא יותר מ־${fmt(MILUIM_MAX_DAY)} ליום (משולם גם על סופ"ש). הערכה בלבד.
-      </div>
-      <button onClick=${()=>{
-          const cutoff=addMonths(todayS(),-3);
-          const gross=(shifts||[]).filter(s=>s.date>=cutoff&&s.date<todayS()).reduce((n,s)=>n+s.earnings+(s.travel||0)+(s.bonus||0),0);
-          if(gross<=0){ alert('לא נמצאו משמרות ב-3 החודשים האחרונים לחישוב. הזן תגמול ידנית.'); return; }
-          const daily=Math.round(Math.min(MILUIM_MAX_DAY,Math.max(MILUIM_MIN_DAY,gross/90)));
-          setRate(String(daily));
-        }}
-        class="w-full text-white py-2 rounded-lg text-sm font-semibold transition-opacity hover:opacity-90"
-        style=${{backgroundColor:MILUIM_COLOR}}>
-        חשב תגמול אוטומטית לפי 3 החודשים האחרונים</button>`}
+        <div class="mt-2 pt-2 border-t text-sm font-bold" style=${{borderColor:MILUIM_COLOR+'44',color:MILUIM_COLOR}}>
+          תגמול יומי מחושב: ${fmt(miluimRate())}
+        </div>
+      </div>`}
     ${type==='monthly'&&html`<div class="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg p-2">
       משרה חודשית: השכר החודשי יחושב פעם אחת בחודש, ללא תלות במספר המשמרות.
     </div>`}
-    <div>
-      <label class="block text-sm font-medium text-gray-700 mb-1">${type==='daily'?'שכר יומי (₪)':type==='hourly'?'שכר שעתי (₪)':type==='miluim'?'תגמול מילואים ליום (₪)':'שכר חודשי (₪)'}</label>
+    ${type!=='miluim'&&html`<div>
+      <label class="block text-sm font-medium text-gray-700 mb-1">${type==='daily'?'שכר יומי (₪)':type==='hourly'?'שכר שעתי (₪)':'שכר חודשי (₪)'}</label>
       <input type="number" value=${rate} onInput=${e=>setRate(e.target.value)} placeholder="0"
         class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
-    </div>
-    <div>
+    </div>`}
+    ${type!=='miluim'&&html`<div>
       <label class="block text-sm font-medium text-gray-700 mb-1">שעות עבודה</label>
       <div class="flex gap-2 mb-2">
         ${[['fixed','קבועות'],['variable','משתנות מיום ליום']].map(([v,l])=>html`
@@ -491,14 +496,14 @@ function JobForm({initial, shifts, onSave, onClose}) {
         </div>
       </div>
       <p class="text-xs text-gray-400 mt-1">${hoursMode==='fixed'?'כל המשמרות ישתמשו בשעות אלה.':'אלה שעות ברירת המחדל — ניתן לשנות בכל משמרת בנפרד.'}</p>
-    </div>
-    <div>
+    </div>`}
+    ${type!=='miluim'&&html`<div>
       <label class="block text-sm font-medium text-gray-700 mb-1">תאריך תחילת עבודה במשרה זו</label>
       <input type="date" value=${jobStart} onChange=${e=>setJobStart(e.target.value)}
         class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
       <p class="text-xs text-gray-400 mt-1">משמש לחישוב אוטומטי של תחילת ניכוי הפנסיה (לפי חוק — 3 חודשים).</p>
-    </div>
-    <div>
+    </div>`}
+    ${type!=='miluim'&&html`<div>
       <label class="block text-sm font-medium text-gray-700 mb-1">ניכוי פנסיה (6%)</label>
       <div class="flex gap-2">
         ${[['auto','אוטומטי (אחרי 3 חודשים)'],['always','תמיד'],['never','אף פעם']].map(([v,l])=>html`
@@ -507,13 +512,13 @@ function JobForm({initial, shifts, onSave, onClose}) {
             ${l}</button>`)}
       </div>
       ${pensionMode==='auto'&&html`<p class="text-xs text-gray-400 mt-1">לפי תאריך ההתחלה, ניכוי הפנסיה יתחיל מ־${pensionFrom}.</p>`}
-    </div>
-    <div>
+    </div>`}
+    ${type!=='miluim'&&html`<div>
       <label class="block text-sm font-medium text-gray-700 mb-1">נסיעות ליום עבודה (₪)</label>
       <input type="number" step="0.5" min="0" value=${travelDay} onInput=${e=>setTravelDay(e.target.value)} placeholder="0"
         class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
       <p class="text-xs text-gray-400 mt-1">יתווסף אוטומטית לכל משמרת (ניתן לשנות בכל משמרת). למשל 16.6 ₪ ליום.</p>
-    </div>
+    </div>`}
     <div class="flex gap-2 pt-1">
       <button onClick=${submit} class="flex-1 bg-blue-500 text-white py-2 rounded-lg text-sm font-semibold hover:bg-blue-600 transition-colors">שמור</button>
       <button onClick=${onClose} class="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg text-sm font-semibold hover:bg-gray-200 transition-colors">ביטול</button>
