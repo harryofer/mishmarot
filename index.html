@@ -167,12 +167,31 @@ function dateRange(a,b) {
 // Module-level Google token (survives tab switches, clears on page reload)
 let _gToken = null;
 let _gClient = null;
-async function deleteGcalEvent(id){
-  if(!id||!_gToken) return;
+// Calendar deletions are queued so they survive missing/expired tokens and retry later
+function enqueueGcalDel(ids){
   try{
-    await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events/'+id,
-      {method:'DELETE',headers:{Authorization:'Bearer '+_gToken}});
+    const q=JSON.parse(localStorage.getItem('sw_gcal_del')||'[]');
+    localStorage.setItem('sw_gcal_del',JSON.stringify([...new Set([...q,...ids])]));
   }catch(e){}
+}
+async function processGcalDelQueue(){
+  if(!_gToken) return;
+  let q=[]; try{ q=JSON.parse(localStorage.getItem('sw_gcal_del')||'[]'); }catch(e){}
+  if(!q.length) return;
+  const remaining=[];
+  for(const id of q){
+    try{
+      const r=await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events/'+id,
+        {method:'DELETE',headers:{Authorization:'Bearer '+_gToken}});
+      if(!(r.ok||r.status===404||r.status===410)) remaining.push(id);
+    }catch(e){ remaining.push(id); }
+  }
+  try{ localStorage.setItem('sw_gcal_del',JSON.stringify(remaining)); }catch(e){}
+}
+function deleteGcalEvent(id){
+  if(!id) return;
+  enqueueGcalDel([id]);
+  processGcalDelQueue();
 }
 async function uploadFileToDrive(file,meta){
   const boundary='-------314159265358979323846';
@@ -1540,6 +1559,7 @@ function GoogleDriveSection({settings,setSettings,jobs,shifts,payslips,setJobs,s
         if (r.error) { setStatus('שגיאה: '+r.error); return; }
         setTok(r.access_token);
         setStatus('מחובר ✓');
+        processGcalDelQueue();
       }
     });
     return _gClient;
@@ -1699,11 +1719,43 @@ function GoogleCalendarSection({jobs,shifts,setShifts}) {
     if(list.length===0){ setStatus('אין משמרות לסנכרון בטווח הנבחר'); return; }
     setBusy(true); setStatus('מסנכרן '+list.length+' משמרות...');
     try{
+      await processGcalDelQueue(); // flush pending deletions first
       const idMap={};
       for(const s of list){ idMap[s.id]=await syncOne(s); }
       setShifts(arr=>arr.map(x=>idMap[x.id]?{...x,gcalId:idMap[x.id]}:x));
       setStatus('סונכרנו '+list.length+' משמרות ליומן ✓');
     }catch(e){ setStatus('שגיאה: '+e.message+' (ודא שהפעלת Calendar API וחיברת מחדש)'); }
+    setBusy(false);
+  };
+
+  // Remove app-created "עבודה" events that no longer have a matching shift (orphans)
+  const cleanup = async () => {
+    if(!_gToken){ alert('התחבר תחילה ל-Google בכרטיס "גיבוי Google Drive" למעלה'); return; }
+    setBusy(true); setStatus('סורק את היומן...');
+    try{
+      await processGcalDelQueue();
+      const known=new Set(shifts.filter(s=>s.gcalId).map(s=>s.gcalId));
+      const tMin=new Date(Date.now()-366*864e5).toISOString(), tMax=new Date(Date.now()+366*864e5).toISOString();
+      let items=[], pageToken='';
+      do{
+        const u='https://www.googleapis.com/calendar/v3/calendars/primary/events?maxResults=250&singleEvents=true'
+          +'&q='+encodeURIComponent('עבודה')+'&timeMin='+encodeURIComponent(tMin)+'&timeMax='+encodeURIComponent(tMax)
+          +(pageToken?'&pageToken='+encodeURIComponent(pageToken):'');
+        const r=await fetch(u,{headers:{Authorization:'Bearer '+_gToken}});
+        const j=await r.json();
+        if(j.error) throw new Error(j.error.message||'שגיאה');
+        items=items.concat(j.items||[]); pageToken=j.nextPageToken||'';
+      }while(pageToken);
+      const orphans=items.filter(ev=>ev.summary&&ev.summary.indexOf('עבודה')===0&&!known.has(ev.id));
+      if(!orphans.length){ setStatus('לא נמצאו ביומן אירועי עבודה יתומים ✓'); setBusy(false); return; }
+      if(!confirm('נמצאו '+orphans.length+' אירועי "עבודה" ביומן ללא משמרת תואמת באפליקציה.\nלמחוק אותם מהיומן?')){ setStatus(''); setBusy(false); return; }
+      setStatus('מוחק '+orphans.length+' אירועים...');
+      for(const ev of orphans){
+        await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events/'+ev.id,
+          {method:'DELETE',headers:{Authorization:'Bearer '+_gToken}});
+      }
+      setStatus('נמחקו '+orphans.length+' אירועים מהיומן ✓');
+    }catch(e){ setStatus('שגיאה: '+e.message); }
     setBusy(false);
   };
 
@@ -1721,6 +1773,9 @@ function GoogleCalendarSection({jobs,shifts,setShifts}) {
     <button onClick=${sync} disabled=${busy}
       class="w-full bg-red-500 text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-red-600 disabled:opacity-50 transition-colors">
       ${busy?'...':html`<${Icon} name="calendar" size=${14}/> סנכרן ליומן Google`}</button>
+    <button onClick=${cleanup} disabled=${busy}
+      class="w-full border border-red-200 text-red-500 py-2 rounded-lg text-sm font-medium hover:bg-red-50 disabled:opacity-50 transition-colors">
+      ${busy?'...':html`<${Icon} name="trash" size=${13}/> נקה מהיומן משמרות שנמחקו`}</button>
     ${status&&html`<div class=${'text-xs text-center py-1.5 px-3 rounded-lg '+(status.includes('שגיאה')?'bg-red-50 text-red-600':'bg-blue-50 text-blue-700')}>
       ${status}</div>`}
   </div>`;
@@ -2087,7 +2142,7 @@ function App() {
           window.google.accounts.oauth2.initTokenClient({
             client_id:settings.gClientId.trim(),
             scope:'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/calendar.events',
-            callback:r=>{ if(!r.error) _gToken=r.access_token; }
+            callback:r=>{ if(!r.error){ _gToken=r.access_token; processGcalDelQueue(); } }
           }).requestAccessToken({prompt:''});
         }catch(e){}
       } else if(++tries>25) clearInterval(iv);
