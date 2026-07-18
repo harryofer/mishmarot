@@ -221,6 +221,13 @@ const CVAL=242, NI_FL=6970, NI_CL=49030;
 // Miluim (reserve duty) daily compensation bounds — Bituach Leumi estimates, editable by the user
 const MILUIM_MIN_DAY=310, MILUIM_MAX_DAY=1650, MILUIM_COLOR='#4B5320';
 
+// Google OAuth Client ID (public identifier, baked in; stored overrides are ignored unless valid)
+const DEFAULT_GCID='365339624558-7t7arbt13od0i1frr0i3v0ernhsq6mhv.apps.googleusercontent.com';
+function activeGcid(settings){
+  const v=settings&&settings.gClientId;
+  return (typeof v==='string'&&v.trim().endsWith('.apps.googleusercontent.com'))?v.trim():DEFAULT_GCID;
+}
+
 function calcTax(g, pts) {
   let tax=0, prev=0;
   for (const {l,r} of BRACKETS) {
@@ -1629,7 +1636,7 @@ function GoogleDriveSection({settings,setSettings,jobs,shifts,payslips,setJobs,s
   const [status, setStatus] = useState('');
   const [busy,   setBusy]   = useState(false);
 
-  const clientId = (settings&&settings.gClientId)||'';
+  const clientId = activeGcid(settings);
   const SCOPE    = 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/calendar.events';
   const FILE     = 'shifts_backup.json';
 
@@ -1653,7 +1660,6 @@ function GoogleDriveSection({settings,setSettings,jobs,shifts,payslips,setJobs,s
   };
 
   const connect = () => {
-    if (!clientId.trim()) return alert('יש להזין Google Client ID תחילה');
     if (!gReady()) return alert('ספריית Google טרם נטענה. נסה שוב בעוד שנייה.');
     setSettings(s=>({...s,gConnected:true}));
     const c=getClient(); if(c) c.requestAccessToken({prompt:'consent'});
@@ -1734,13 +1740,6 @@ function GoogleDriveSection({settings,setSettings,jobs,shifts,payslips,setJobs,s
   };
 
   return html`<div class="space-y-3">
-    <div>
-      <label class="block text-sm font-medium text-gray-700 mb-1">Google Client ID</label>
-      <input value=${clientId} onInput=${e=>setSettings(s=>({...s,gClientId:e.target.value}))}
-        placeholder="xxxx.apps.googleusercontent.com"
-        class="w-full border border-gray-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-300 font-mono"/>
-      <p class="text-xs text-gray-400 mt-1">נדרש: Google Cloud Project → APIs & Services → Credentials → OAuth 2.0 Client ID</p>
-    </div>
     ${token
       ? html`<button onClick=${()=>{setTok(null);setStatus('');setSettings(s=>({...s,gConnected:false}));}}
           class="w-full bg-gray-100 text-gray-700 py-2 rounded-lg text-sm font-medium hover:bg-gray-200">
@@ -2214,12 +2213,12 @@ function App() {
   // Auto Google sign-in on load: (1) reuse saved token, (2) silent attempt,
   // (3) fallback on first user tap (browsers allow the OAuth popup only on a user gesture)
   useEffect(()=>{
-    if(!settings||!settings.gConnected||!settings.gClientId) return;
+    if(!settings||!settings.gConnected) return;
     const silent=()=>{
       if(_gToken) return;
       try{
         window.google.accounts.oauth2.initTokenClient({
-          client_id:settings.gClientId.trim(),
+          client_id:activeGcid(settings),
           scope:'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/calendar.events',
           callback:r=>{ if(!r.error){ saveGTok(r.access_token); processGcalDelQueue(); } }
         }).requestAccessToken({prompt:''});
