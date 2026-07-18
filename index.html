@@ -1186,7 +1186,7 @@ function ShiftsPage({shifts,setShifts,jobs}) {
 }
 
 // ── DashboardPage ────────────────────────────────────────────
-function DashboardPage({shifts,jobs,settings,payslips,setTab}) {
+function DashboardPage({shifts,setShifts,jobs,settings,payslips,setTab}) {
   const now=new Date();
   const [year,setYear]=useState(now.getFullYear());
   const [month,setMonth]=useState(now.getMonth());
@@ -1232,6 +1232,12 @@ function DashboardPage({shifts,jobs,settings,payslips,setTab}) {
   },[shifts,jobs,year,month,settings.creditPoints,today]);
 
   const allPaid = d.past.length>0 && d.past.every(s=>s.isPaid);
+
+  // Today's shifts — quick "I arrived" button on the home screen
+  const todayShifts = shifts.filter(s=>s.date===today);
+  const todayArrived = todayShifts.length>0 && todayShifts.every(s=>s.arrived);
+  const toggleArrivedToday = () =>
+    setShifts&&setShifts(arr=>arr.map(s=>s.date===today?{...s,arrived:!todayArrived}:s));
 
   // ── Sharing ──
   const [shareScope,setShareScope]=useState(()=>{const n=new Date();return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');}); // 'all' | 'YYYY-MM'
@@ -1286,6 +1292,16 @@ function DashboardPage({shifts,jobs,settings,payslips,setTab}) {
       <h2 class="text-base font-bold text-gray-800">סיכום חודשי</h2>
     </div>
     <${MonthStrip} year=${year} month=${month} onChange=${(y,m)=>{setYear(y);setMonth(m);}}/>
+
+    ${todayShifts.length>0&&html`
+      <button onClick=${toggleArrivedToday}
+        class=${'w-full py-3 rounded-xl text-sm font-bold transition-colors flex items-center justify-center gap-2 '+
+          (todayArrived
+            ?'bg-emerald-500 text-white hover:bg-emerald-600'
+            :'bg-white border-2 border-emerald-300 text-emerald-600 hover:bg-emerald-50 shadow-sm')}>
+        <${Icon} name="check" size=${17}/>
+        ${todayArrived?'הגעת היום למשמרת — הקש לביטול':'הגעתי היום למשמרת'}
+      </button>`}
 
     ${d.monthlyTotal>0&&html`
       <div class="bg-blue-50 border border-blue-100 rounded-xl px-4 py-2.5 text-sm text-blue-700 flex items-center gap-2">
@@ -2113,7 +2129,7 @@ function App() {
     </header>
     <main class="max-w-2xl mx-auto px-4 py-5">
       <div class="fade">
-        ${tab==='dashboard'&&html`<${DashboardPage} shifts=${shifts} jobs=${jobs} settings=${settings} payslips=${payslips} setTab=${setTab}/>`}
+        ${tab==='dashboard'&&html`<${DashboardPage} shifts=${shifts} setShifts=${setShifts} jobs=${jobs} settings=${settings} payslips=${payslips} setTab=${setTab}/>`}
         ${tab==='shifts'   &&html`<${ShiftsPage}    shifts=${shifts} setShifts=${setShifts} jobs=${jobs}/>`}
         ${tab==='jobs'     &&html`<${JobsPage}       jobs=${jobs}    setJobs=${setJobs} shifts=${shifts} setShifts=${setShifts}/>`}
         ${tab==='payslips' &&html`<${PayslipsPage}   payslips=${payslips} setPayslips=${setPayslips} setShifts=${setShifts} setTab=${setTab}/>`}
