@@ -215,6 +215,8 @@ async function deleteDriveFile(id){
 // ── Tax (Israel 2026 estimate) ───────────────────────────────
 const BRACKETS  = [{l:7380,r:.10},{l:10620,r:.14},{l:17040,r:.20},{l:22440,r:.31},{l:46640,r:.35},{l:60130,r:.47},{l:1e9,r:.50}];
 const CVAL=242, NI_FL=6970, NI_CL=49030;
+// Miluim (reserve duty) daily compensation bounds — Bituach Leumi estimates, editable by the user
+const MILUIM_MIN_DAY=310, MILUIM_MAX_DAY=1650, MILUIM_COLOR='#4B5320';
 
 function calcTax(g, pts) {
   let tax=0, prev=0;
@@ -403,7 +405,7 @@ function StatCard({label,value,sub,color,icon}) {
 }
 
 // ── JobForm ──────────────────────────────────────────────────
-function JobForm({initial, onSave, onClose}) {
+function JobForm({initial, shifts, onSave, onClose}) {
   const [name,  setName]  = useState((initial&&initial.name)||'');
   const [color, setColor] = useState((initial&&initial.color)||COLORS[0]);
   const [type,  setType]  = useState((initial&&initial.rateType)||'daily');
@@ -435,17 +437,36 @@ function JobForm({initial, onSave, onClose}) {
     <div>
       <label class="block text-sm font-medium text-gray-700 mb-1">סוג תעריף</label>
       <div class="flex gap-2">
-        ${[['daily','יומי'],['hourly','שעתי'],['monthly','חודשי']].map(([v,l])=>html`
-          <button key=${v} onClick=${()=>setType(v)}
-            class=${'flex-1 py-2 rounded-lg text-sm font-medium transition-colors '+(type===v?'bg-blue-500 text-white':'bg-gray-100 text-gray-600 hover:bg-gray-200')}>
+        ${[['daily','יומי'],['hourly','שעתי'],['monthly','חודשי'],['miluim','מילואים']].map(([v,l])=>html`
+          <button key=${v} onClick=${()=>{setType(v); if(v==='miluim') setColor(MILUIM_COLOR);}}
+            class=${'flex-1 py-2 rounded-lg text-sm font-medium transition-colors '+(type===v
+              ?(v==='miluim'?'text-white':'bg-blue-500 text-white')
+              :'bg-gray-100 text-gray-600 hover:bg-gray-200')}
+            style=${type===v&&v==='miluim'?{backgroundColor:MILUIM_COLOR}:null}>
             ${l}</button>`)}
       </div>
     </div>
+    ${type==='miluim'&&html`
+      <div class="rounded-lg p-3 text-xs leading-5 border" style=${{backgroundColor:MILUIM_COLOR+'15',borderColor:MILUIM_COLOR+'44',color:'#3d451f'}}>
+        <div class="font-semibold mb-1" style=${{color:MILUIM_COLOR}}>שירות מילואים</div>
+        התגמול היומי מביטוח לאומי = השכר ברוטו של 3 החודשים האחרונים ÷ 90,
+        לא פחות מ־${fmt(MILUIM_MIN_DAY)} ולא יותר מ־${fmt(MILUIM_MAX_DAY)} ליום (משולם גם על סופ"ש). הערכה בלבד.
+      </div>
+      <button onClick=${()=>{
+          const cutoff=addMonths(todayS(),-3);
+          const gross=(shifts||[]).filter(s=>s.date>=cutoff&&s.date<todayS()).reduce((n,s)=>n+s.earnings+(s.travel||0)+(s.bonus||0),0);
+          if(gross<=0){ alert('לא נמצאו משמרות ב-3 החודשים האחרונים לחישוב. הזן תגמול ידנית.'); return; }
+          const daily=Math.round(Math.min(MILUIM_MAX_DAY,Math.max(MILUIM_MIN_DAY,gross/90)));
+          setRate(String(daily));
+        }}
+        class="w-full text-white py-2 rounded-lg text-sm font-semibold transition-opacity hover:opacity-90"
+        style=${{backgroundColor:MILUIM_COLOR}}>
+        חשב תגמול אוטומטית לפי 3 החודשים האחרונים</button>`}
     ${type==='monthly'&&html`<div class="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg p-2">
       משרה חודשית: השכר החודשי יחושב פעם אחת בחודש, ללא תלות במספר המשמרות.
     </div>`}
     <div>
-      <label class="block text-sm font-medium text-gray-700 mb-1">${type==='daily'?'שכר יומי (₪)':type==='hourly'?'שכר שעתי (₪)':'שכר חודשי (₪)'}</label>
+      <label class="block text-sm font-medium text-gray-700 mb-1">${type==='daily'?'שכר יומי (₪)':type==='hourly'?'שכר שעתי (₪)':type==='miluim'?'תגמול מילואים ליום (₪)':'שכר חודשי (₪)'}</label>
       <input type="number" value=${rate} onInput=${e=>setRate(e.target.value)} placeholder="0"
         class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
     </div>
@@ -526,7 +547,7 @@ function ShiftForm({initial, jobs, shifts, onSave, onClose, onDelete}) {
   },[jobId]);
 
   const hours      = hoursBetween(startTime,endTime);
-  const baseEarn   = isMonthly ? 0 : (job?(job.rateType==='daily'?job.rate:job.rate*hours):0);
+  const baseEarn   = isMonthly ? 0 : (job?((job.rateType==='daily'||job.rateType==='miluim')?job.rate:job.rate*hours):0);
   const total      = baseEarn+(+travel||0)+(+bonus||0);
 
   const submit = () => {
@@ -589,7 +610,7 @@ function ShiftForm({initial, jobs, shifts, onSave, onClose, onDelete}) {
     ${job&&html`<div class="bg-slate-50 rounded-lg px-3 py-2 text-sm">
       <span class="text-gray-500">סה"כ משמרת: </span>
       <span class="font-bold text-emerald-600 text-base">${fmt(total)}</span>
-      ${!isMonthly&&html`<span class="text-gray-400 text-xs"> (${job.rateType==='daily'?fmt(job.rate)+' יומי':fmt(job.rate)+'/שעה × '+hours})</span>`}
+      ${!isMonthly&&html`<span class="text-gray-400 text-xs"> (${job.rateType==='daily'?fmt(job.rate)+' יומי':job.rateType==='miluim'?fmt(job.rate)+' תגמול יומי':fmt(job.rate)+'/שעה × '+hours})</span>`}
     </div>`}
     <div>
       <label class="block text-sm font-medium text-gray-700 mb-1">הערות</label>
@@ -754,7 +775,7 @@ function BulkShiftForm({startDate,endDate,jobs,shifts,onSave,onDeleteRange,onMar
     if(!sDate||!eDate) return alert('יש לבחור טווח תאריכים');
     if(toAdd.length===0) return alert('אין תאריכים חדשים להוסיף בטווח זה');
     const newShifts=toAdd.map(d=>{
-      const earn=isMonthly?0:(job?(job.rateType==='daily'?job.rate:job.rate*(+hours||0)):0);
+      const earn=isMonthly?0:(job?((job.rateType==='daily'||job.rateType==='miluim')?job.rate:job.rate*(+hours||0)):0);
       return {id:genId(),jobId,date:d,hours:+hours||0,startTime:(job&&job.startTime)||'08:00',endTime:(job&&job.endTime)||'16:00',travel:+travel||0,bonus:0,isPaid:false,notes:'',earnings:earn};
     });
     onSave(newShifts); onClose();
@@ -951,7 +972,7 @@ function JobsPage({jobs,setJobs,shifts,setShifts}) {
       const st=variable?(s.startTime||job.startTime||'08:00'):(job.startTime||'08:00');
       const et=variable?(s.endTime  ||job.endTime  ||'16:00'):(job.endTime  ||'16:00');
       const hrs=hoursBetween(st,et);
-      const earn=job.rateType==='monthly'?0:(job.rateType==='daily'?job.rate:job.rate*hrs);
+      const earn=job.rateType==='monthly'?0:((job.rateType==='daily'||job.rateType==='miluim')?job.rate:job.rate*hrs);
       let travel=s.travel;
       if((job.travelPerDay||0)!==(oldJob.travelPerDay||0)){
         if(!travel || travel===(oldJob.travelPerDay||0)) travel=job.travelPerDay||0;
@@ -978,7 +999,7 @@ function JobsPage({jobs,setJobs,shifts,setShifts}) {
               <div class="w-11 h-11 rounded-full flex-shrink-0" style=${{backgroundColor:job.color}}/>
               <div>
                 <div class="font-semibold text-gray-800">${job.name}</div>
-                <div class="text-sm text-gray-500">${job.rateType==='daily'?fmt(job.rate)+' ליום':job.rateType==='hourly'?fmt(job.rate)+' לשעה':fmt(job.rate)+' לחודש'}</div>
+                <div class="text-sm text-gray-500">${job.rateType==='daily'?fmt(job.rate)+' ליום':job.rateType==='hourly'?fmt(job.rate)+' לשעה':job.rateType==='miluim'?fmt(job.rate)+' תגמול ליום':fmt(job.rate)+' לחודש'}</div>
               </div>
             </div>
             <div class="flex gap-1">
@@ -989,7 +1010,7 @@ function JobsPage({jobs,setJobs,shifts,setShifts}) {
         </div>`)}
       </div>`}
     ${modal&&html`<${Modal} title=${modal==='add'?'הוסף משרה':'ערוך משרה'} onClose=${()=>setModal(null)}>
-      <${JobForm} initial=${editing} onSave=${save} onClose=${()=>setModal(null)}/>
+      <${JobForm} initial=${editing} shifts=${shifts} onSave=${save} onClose=${()=>setModal(null)}/>
     <//>`}
     ${applyModal&&html`<${Modal} title="עדכון משמרות קיימות" onClose=${()=>setApplyModal(null)}>
       <${ApplyJobChanges} jobName=${applyModal.job.name} onApply=${applyToShifts} onSkip=${()=>setApplyModal(null)}/>
@@ -1686,13 +1707,14 @@ function GoogleCalendarSection({jobs,shifts,setShifts}) {
 
   const syncOne = async (s) => {
     const job=findJob(jobs,s.jobId);
-    const title='עבודה'+(job?' – '+job.name:'');
+    const isMil=job&&job.rateType==='miluim';
+    const title=isMil?'מילואים':'עבודה'+(job?' – '+job.name:'');
     const st=s.startTime||(job&&job.startTime)||'08:00';
     const et=s.endTime||(job&&job.endTime)||'16:00';
     let endDate=s.date;
     if(et<=st){ const nd=new Date(s.date+'T12:00:00'); nd.setDate(nd.getDate()+1); endDate=nd.toISOString().slice(0,10); }
     const body={
-      summary:title, colorId:'11',
+      summary:title, colorId:isMil?'10':'11',
       start:{dateTime:s.date+'T'+st+':00', timeZone:'Asia/Jerusalem'},
       end:{dateTime:endDate+'T'+et+':00', timeZone:'Asia/Jerusalem'},
       reminders:{useDefault:false, overrides:[]}
@@ -1738,14 +1760,14 @@ function GoogleCalendarSection({jobs,shifts,setShifts}) {
       let items=[], pageToken='';
       do{
         const u='https://www.googleapis.com/calendar/v3/calendars/primary/events?maxResults=250&singleEvents=true'
-          +'&q='+encodeURIComponent('עבודה')+'&timeMin='+encodeURIComponent(rMin)+'&timeMax='+encodeURIComponent(rMax)
+          +'&timeMin='+encodeURIComponent(rMin)+'&timeMax='+encodeURIComponent(rMax)
           +(pageToken?'&pageToken='+encodeURIComponent(pageToken):'');
         const r=await fetch(u,{headers:{Authorization:'Bearer '+_gToken}});
         const j=await r.json();
         if(j.error) throw new Error(j.error.message||'שגיאה');
         items=items.concat(j.items||[]); pageToken=j.nextPageToken||'';
       }while(pageToken);
-      const orphans=items.filter(ev=>ev.summary&&ev.summary.indexOf('עבודה')===0&&!known.has(ev.id));
+      const orphans=items.filter(ev=>ev.summary&&(ev.summary.indexOf('עבודה')===0||ev.summary==='מילואים')&&!known.has(ev.id));
       for(const ev of orphans){
         await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events/'+ev.id,
           {method:'DELETE',headers:{Authorization:'Bearer '+_gToken}});
