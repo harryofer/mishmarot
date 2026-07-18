@@ -528,8 +528,9 @@ function JobForm({initial, shifts, onSave, onClose}) {
 
 // ── ShiftForm ────────────────────────────────────────────────
 function ShiftForm({initial, jobs, shifts, onSave, onClose, onDelete}) {
-  const jobInit = findJob(jobs,(initial&&initial.jobId)||(jobs[0]&&jobs[0].id));
-  const [jobId,  setJobId]  = useState((initial&&initial.jobId)||(jobs[0]&&jobs[0].id)||'');
+  const firstActive = jobs.find(j=>!j.deleted);
+  const jobInit = findJob(jobs,(initial&&initial.jobId)||(firstActive&&firstActive.id));
+  const [jobId,  setJobId]  = useState((initial&&initial.jobId)||(firstActive&&firstActive.id)||'');
   const [date,   setDate]   = useState((initial&&initial.date)||todayS());
   const [startTime,setStartTime]=useState((initial&&initial.startTime)||(jobInit&&jobInit.startTime)||'08:00');
   const [endTime,  setEndTime]  =useState((initial&&initial.endTime)  ||(jobInit&&jobInit.endTime)  ||'16:00');
@@ -561,7 +562,7 @@ function ShiftForm({initial, jobs, shifts, onSave, onClose, onDelete}) {
     onSave({jobId,date,hours,startTime,endTime,travel:+travel||0,bonus:+bonus||0,isPaid,arrived,notes,earnings:baseEarn});
   };
 
-  if (!jobs.length) return html`<div class="text-center py-8 text-gray-400">
+  if (!jobs.some(j=>!j.deleted)) return html`<div class="text-center py-8 text-gray-400">
     <div class="flex justify-center mb-2 text-gray-300"><${Icon} name="briefcase" size=${36}/></div>
     <p>אין משרות. הוסף משרה קודם בלשונית "משרות".</p>
     <button onClick=${onClose} class="mt-4 text-blue-500 underline text-sm">סגור</button>
@@ -572,7 +573,7 @@ function ShiftForm({initial, jobs, shifts, onSave, onClose, onDelete}) {
       <label class="block text-sm font-medium text-gray-700 mb-1">משרה</label>
       <select value=${jobId} onChange=${e=>setJobId(e.target.value)}
         class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
-        ${jobs.map(j=>html`<option key=${j.id} value=${j.id}>${j.name}</option>`)}
+        ${jobs.filter(j=>!j.deleted||j.id===jobId).map(j=>html`<option key=${j.id} value=${j.id}>${j.name}${j.deleted?' (נמחקה)':''}</option>`)}
       </select>
     </div>
     <div>
@@ -756,11 +757,12 @@ function CalendarView({year,month,shifts,jobs,onDayClick,onShiftClick,onRangeSel
 
 // ── BulkShiftForm ────────────────────────────────────────────
 function BulkShiftForm({startDate,endDate,jobs,shifts,onSave,onDeleteRange,onMarkPaid,onClose}) {
-  const [jobId,     setJobId]     = useState((jobs[0]&&jobs[0].id)||'');
+  const firstActive = jobs.find(j=>!j.deleted);
+  const [jobId,     setJobId]     = useState((firstActive&&firstActive.id)||'');
   const [sDate,     setSDate]     = useState(startDate||todayS());
   const [eDate,     setEDate]     = useState(endDate||todayS());
   const [hours,     setHours]     = useState(8);
-  const [travel,    setTravel]    = useState((jobs[0]&&jobs[0].travelPerDay)||0);
+  const [travel,    setTravel]    = useState((firstActive&&firstActive.travelPerDay)||0);
   const [skipExist, setSkipExist] = useState(true);
 
   const bFirst=useRef(true);
@@ -791,7 +793,7 @@ function BulkShiftForm({startDate,endDate,jobs,shifts,onSave,onDeleteRange,onMar
       <label class="block text-sm font-medium text-gray-700 mb-1">משרה</label>
       <select value=${jobId} onChange=${e=>setJobId(e.target.value)}
         class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
-        ${jobs.map(j=>html`<option key=${j.id} value=${j.id}>${j.name}</option>`)}
+        ${jobs.filter(j=>!j.deleted).map(j=>html`<option key=${j.id} value=${j.id}>${j.name}</option>`)}
       </select>
     </div>
     <div class="grid grid-cols-2 gap-3">
@@ -954,6 +956,9 @@ function ShiftDetailModal({shift, jobs, onEdit, onDelete, onClose}) {
 function JobsPage({jobs,setJobs,shifts,setShifts}) {
   const [modal,setModal]=useState(null);
   const [applyModal,setApplyModal]=useState(null); // {job,oldJob} after editing a job that has shifts
+  const [showDeleted,setShowDeleted]=useState(false);
+  const [purgeJob,setPurgeJob]=useState(null);
+  const active=jobs.filter(j=>!j.deleted), removed=jobs.filter(j=>j.deleted);
   const editing = (modal&&modal!=='add') ? findJob(jobs,modal) : null;
   const save = data => {
     if(editing){
@@ -965,7 +970,23 @@ function JobsPage({jobs,setJobs,shifts,setShifts}) {
     }
     setModal(null);
   };
-  const del = id => { if(confirm('למחוק משרה זו?')) setJobs(j=>j.filter(x=>x.id!==id)); };
+  // Soft delete: job moves to the "deleted" list, shifts and data are kept
+  const del = id => {
+    if(confirm('להעביר משרה זו ל"נמחקו"?\nכל המשמרות והנתונים שהוזנו יישמרו, ותוכל לשחזר את המשרה בכל רגע.'))
+      setJobs(j=>j.map(x=>x.id===id?{...x,deleted:true}:x));
+  };
+  const restore = id => setJobs(j=>j.map(x=>x.id===id?{...x,deleted:false}:x));
+  // Permanent delete — optionally removes the job's shifts too (incl. their calendar events)
+  const purge = withShifts => {
+    const job=purgeJob;
+    if(withShifts){
+      const gids=shifts.filter(s=>s.jobId===job.id&&s.gcalId).map(s=>s.gcalId);
+      if(gids.length){ enqueueGcalDel(gids); processGcalDelQueue(); }
+      setShifts(arr=>arr.filter(s=>s.jobId!==job.id));
+    }
+    setJobs(j=>j.filter(x=>x.id!==job.id));
+    setPurgeJob(null);
+  };
 
   // Apply the edited job's rate/hours/travel to existing shifts (all, or from a given date)
   const applyToShifts = fromDate => {
@@ -991,14 +1012,14 @@ function JobsPage({jobs,setJobs,shifts,setShifts}) {
       <h2 class="text-base font-bold text-gray-800">המשרות שלי</h2>
       <button onClick=${()=>setModal('add')} class="bg-blue-500 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-blue-600 transition-colors">+ הוסף משרה</button>
     </div>
-    ${jobs.length===0?html`
+    ${active.length===0?html`
       <div class="text-center py-16 text-gray-400 bg-white rounded-xl border border-gray-100">
         <div class="flex justify-center mb-3 text-gray-300"><${Icon} name="briefcase" size=${44}/></div>
         <div class="font-medium">אין משרות עדיין</div>
         <div class="text-sm mt-1">הוסף את המשרה הראשונה שלך</div>
       </div>`:html`
       <div class="grid gap-3 sm:grid-cols-2">
-        ${jobs.map(job=>html`<div key=${job.id} class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm fade">
+        ${active.map(job=>html`<div key=${job.id} class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm fade">
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-3">
               <div class="w-11 h-11 rounded-full flex-shrink-0" style=${{backgroundColor:job.color}}/>
@@ -1014,8 +1035,45 @@ function JobsPage({jobs,setJobs,shifts,setShifts}) {
           </div>
         </div>`)}
       </div>`}
+    ${removed.length>0&&html`
+      <div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+        <button onClick=${()=>setShowDeleted(v=>!v)} class="w-full flex items-center justify-between">
+          <span class="text-sm font-semibold text-gray-500 flex items-center gap-1.5"><${Icon} name="trash" size=${14}/> משרות שנמחקו (${removed.length})</span>
+          <span class="text-gray-400 text-xs">${showDeleted?'▲ הסתר':'▼ הצג'}</span>
+        </button>
+        ${showDeleted&&html`<div class="mt-3 space-y-2">
+          ${removed.map(job=>{
+            const cnt=shifts.filter(s=>s.jobId===job.id).length;
+            return html`<div key=${job.id} class="flex items-center justify-between border border-gray-100 rounded-lg p-2.5 gap-2">
+              <div class="flex items-center gap-2 min-w-0 flex-1">
+                <div class="w-3 h-3 rounded-full flex-shrink-0 opacity-50" style=${{backgroundColor:job.color}}/>
+                <div class="min-w-0">
+                  <div class="text-sm text-gray-600 truncate">${job.name}</div>
+                  <div class="text-xs text-gray-400">${cnt} משמרות שמורות</div>
+                </div>
+              </div>
+              <button onClick=${()=>restore(job.id)} class="flex-shrink-0 text-xs bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg font-semibold hover:bg-blue-100">שחזר</button>
+              <button onClick=${()=>setPurgeJob(job)} class="flex-shrink-0 text-xs bg-red-50 text-red-500 px-3 py-1.5 rounded-lg font-semibold hover:bg-red-100">מחק לצמיתות</button>
+            </div>`;})}
+        </div>`}
+      </div>`}
+
     ${modal&&html`<${Modal} title=${modal==='add'?'הוסף משרה':'ערוך משרה'} onClose=${()=>setModal(null)}>
       <${JobForm} initial=${editing} shifts=${shifts} onSave=${save} onClose=${()=>setModal(null)}/>
+    <//>`}
+    ${purgeJob&&html`<${Modal} title="מחיקה לצמיתות" onClose=${()=>setPurgeJob(null)}>
+      <div class="space-y-3">
+        <p class="text-sm text-gray-600">מחיקת המשרה <strong>"${purgeJob.name}"</strong> לצמיתות.<br/>מה לעשות עם ${shifts.filter(s=>s.jobId===purgeJob.id).length} המשמרות והנתונים שהוזנו?</p>
+        <button onClick=${()=>purge(false)}
+          class="w-full bg-blue-500 text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-blue-600 transition-colors">
+          מחק רק את המשרה — שמור את המשמרות</button>
+        <button onClick=${()=>purge(true)}
+          class="w-full bg-red-500 text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-red-600 transition-colors">
+          מחק גם את כל המשמרות של משרה זו</button>
+        <button onClick=${()=>setPurgeJob(null)}
+          class="w-full bg-gray-100 text-gray-600 py-2.5 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors">
+          ביטול</button>
+      </div>
     <//>`}
     ${applyModal&&html`<${Modal} title="עדכון משמרות קיימות" onClose=${()=>setApplyModal(null)}>
       <${ApplyJobChanges} jobName=${applyModal.job.name} onApply=${applyToShifts} onSkip=${()=>setApplyModal(null)}/>
