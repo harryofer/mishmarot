@@ -60,6 +60,12 @@ self.addEventListener('fetch',e=>{
     /* Drag-select highlight */
     .cal-drag { background-color:#dbeafe !important; border-color:#93c5fd !important; }
     /* Dark mode overrides */
+    :root { color-scheme: light; }
+    input[type=checkbox] { accent-color:#3b82f6; }
+    /* Native controls (checkboxes, date/time pickers, scrollbars) follow the theme */
+    .dark, .dark body { color-scheme: dark; }
+    .dark .border-blue-200 { border-color:rgba(59,130,246,.4) !important; }
+    .dark ::-webkit-scrollbar-thumb { background:#475569; }
     .dark body { background-color:#0f172a !important; }
     .dark .bg-white  { background-color:#1e293b !important; }
     .dark .bg-slate-50 { background-color:#0f172a !important; }
@@ -1469,10 +1475,10 @@ function DashboardPage({shifts,setShifts,jobs,settings,payslips,setTab}) {
       </div>
       ${monthPayslips.length===0
         ? html`<div class="text-xs text-gray-400">לא צורף תלוש לחודש זה — ניתן לצרף בלשונית "תלושים".</div>`
-        : monthPayslips.map(p=>html`<a key=${p.id} href=${safeUrl(p.driveLink)||'#'} target="_blank" rel="noopener noreferrer"
+        : monthPayslips.map(p=>{const pj=p.jobId?findJob(jobs,p.jobId):null;return html`<a key=${p.id} href=${safeUrl(p.driveLink)||'#'} target="_blank" rel="noopener noreferrer"
             class="flex items-center gap-2 py-1.5 text-sm text-blue-700 hover:underline">
-            <${Icon} name="file" size=${16}/><span class="flex-1 min-w-0 truncate">צפה בתלוש</span><${Icon} name="external" size=${14} class="text-gray-300"/>
-          </a>`)}
+            <${Icon} name="file" size=${16}/><span class="flex-1 min-w-0 truncate">${pj?'תלוש '+pj.name:'צפה בתלוש'}</span><${Icon} name="external" size=${14} class="text-gray-300"/>
+          </a>`;})}
     </div>
 
     ${shifts.length>0&&html`
@@ -1927,9 +1933,11 @@ function GoogleCalendarSection({jobs,shifts,setShifts}) {
 }
 
 // ── PayslipsPage ─────────────────────────────────────────────
-function PayslipsPage({payslips,setPayslips,setShifts,setTab}) {
+function PayslipsPage({payslips,setPayslips,setShifts,jobs,setTab}) {
+  const activeJobs=(jobs||[]).filter(j=>!j.deleted);
   const [token, setToken] = useState(()=>_gToken);
   const [month, setMonth] = useState(()=>{const n=new Date();return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');});
+  const [jobId, setJobId] = useState((activeJobs[0]&&activeJobs[0].id)||'');
   const [file,  setFile]  = useState(null);
   const [busy,  setBusy]  = useState(false);
   const [status,setStatus]= useState('');
@@ -1948,13 +1956,14 @@ function PayslipsPage({payslips,setPayslips,setShifts,setTab}) {
     if(file.size>15*1024*1024) return alert('הקובץ גדול מדי (מקסימום 15MB)');
     setBusy(true); setStatus('מעלה...');
     try{
-      const meta={name:'תלוש_'+month+'_'+file.name, mimeType:file.type||'application/octet-stream'};
+      const jn=(findJob(jobs,jobId)||{}).name||'';
+      const meta={name:'תלוש_'+month+(jn?'_'+jn:'')+'_'+file.name, mimeType:file.type||'application/octet-stream'};
       const res=await uploadFileToDrive(file,meta);
       const link=safeUrl(res.webViewLink)||('https://drive.google.com/file/d/'+encodeURIComponent(res.id)+'/view');
-      setPayslips(list=>[...list,{id:genId(),month,name:file.name,driveFileId:res.id,driveLink:link,uploadedAt:new Date().toISOString()}]);
-      // Uploading a payslip for a month marks that month's shifts as paid
-      setShifts&&setShifts(arr=>arr.map(s=>s.date.slice(0,7)===month?{...s,isPaid:true}:s));
-      setFile(null); setStatus('הועלה בהצלחה ✓ — משמרות החודש סומנו כשולם');
+      setPayslips(list=>[...list,{id:genId(),month,jobId:jobId||null,name:file.name,driveFileId:res.id,driveLink:link,uploadedAt:new Date().toISOString()}]);
+      // Mark that month's shifts as paid — only for the linked job (or all if none chosen)
+      setShifts&&setShifts(arr=>arr.map(s=>(s.date.slice(0,7)===month&&(!jobId||s.jobId===jobId))?{...s,isPaid:true}:s));
+      setFile(null); setStatus('הועלה בהצלחה ✓ — משמרות החודש'+(jn?' של "'+jn+'"':'')+' סומנו כשולם');
     }catch(e){ setStatus('שגיאה: '+e.message); }
     setBusy(false);
   };
@@ -2014,6 +2023,13 @@ function PayslipsPage({payslips,setPayslips,setShifts,setTab}) {
             </select>
           </div>
         </div>
+        ${activeJobs.length>0&&html`<div>
+          <label class="block text-xs font-medium text-gray-500 mb-1">משרה (התלוש שייך למשרה זו)</label>
+          <select value=${jobId} onChange=${e=>setJobId(e.target.value)}
+            class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
+            ${activeJobs.map(j=>html`<option key=${j.id} value=${j.id}>${j.name}</option>`)}
+          </select>
+        </div>`}
         <label class="block border-2 border-dashed border-gray-200 rounded-xl p-5 text-center cursor-pointer hover:border-blue-300 hover:bg-blue-50 transition-colors">
           <div class=${'flex justify-center mb-2 '+(file?'text-emerald-500':'text-gray-300')}><${Icon} name=${file?'check':'upload'} size=${30}/></div>
           <div class="text-sm text-gray-600 truncate px-2">${file?file.name:'לחץ לבחירת תמונה או PDF'}</div>
@@ -2039,13 +2055,13 @@ function PayslipsPage({payslips,setPayslips,setShifts,setTab}) {
             <div class="flex-1 h-px bg-gray-100"/>
             <span class="text-[10px] text-gray-400">${g.items.length} ${g.items.length===1?'קובץ':'קבצים'}</span>
           </div>
-          ${g.items.map((p,pi)=>{const c=COLORS[(gi+pi)%COLORS.length];return html`
+          ${g.items.map((p,pi)=>{const pj=p.jobId?findJob(jobs,p.jobId):null; const c=(pj&&pj.color)||COLORS[(gi+pi)%COLORS.length];return html`
             <div key=${p.id} class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex items-stretch">
               <div class="w-1.5 flex-shrink-0" style=${{backgroundColor:c}}/>
               <div class="flex items-center gap-3 p-3 flex-1 min-w-0">
                 <div class="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0" style=${{backgroundColor:c+'22',color:c}}><${Icon} name="file" size=${20}/></div>
                 <div class="flex-1 min-w-0">
-                  <div class="text-sm font-bold text-gray-800">תלוש ${g.label}</div>
+                  <div class="text-sm font-bold text-gray-800 truncate">${pj?pj.name:'תלוש'} · ${g.label}</div>
                   <div class="text-xs text-gray-400 truncate">הועלה ${new Date(p.uploadedAt).toLocaleDateString('he-IL')}</div>
                 </div>
                 <a href=${safeUrl(p.driveLink)||'#'} target="_blank" rel="noopener noreferrer"
@@ -2344,7 +2360,7 @@ function App() {
         ${tab==='dashboard'&&html`<${DashboardPage} shifts=${shifts} setShifts=${setShifts} jobs=${jobs} settings=${settings} payslips=${payslips} setTab=${setTab}/>`}
         ${tab==='shifts'   &&html`<${ShiftsPage}    shifts=${shifts} setShifts=${setShifts} jobs=${jobs}/>`}
         ${tab==='jobs'     &&html`<${JobsPage}       jobs=${jobs}    setJobs=${setJobs} shifts=${shifts} setShifts=${setShifts}/>`}
-        ${tab==='payslips' &&html`<${PayslipsPage}   payslips=${payslips} setPayslips=${setPayslips} setShifts=${setShifts} setTab=${setTab}/>`}
+        ${tab==='payslips' &&html`<${PayslipsPage}   payslips=${payslips} setPayslips=${setPayslips} setShifts=${setShifts} jobs=${jobs} setTab=${setTab}/>`}
         ${tab==='settings' &&html`<${SettingsPage}   settings=${settings} setSettings=${setSettings} jobs=${jobs} shifts=${shifts} setJobs=${setJobs} setShifts=${setShifts} payslips=${payslips} setPayslips=${setPayslips}/>`}
       </div>
     </main>
