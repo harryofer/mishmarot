@@ -769,7 +769,7 @@ function CalendarView({year,month,shifts,jobs,onDayClick,onShiftClick,onRangeSel
 }
 
 // ── BulkShiftForm ────────────────────────────────────────────
-function BulkShiftForm({startDate,endDate,jobs,shifts,onSave,onDeleteRange,onMarkPaid,onClose}) {
+function BulkShiftForm({startDate,endDate,jobs,shifts,onSave,onDeleteRange,onMarkPaid,onEditRange,onClose}) {
   const firstActive = jobs.find(j=>!j.deleted);
   const [jobId,     setJobId]     = useState((firstActive&&firstActive.id)||'');
   const [sDate,     setSDate]     = useState(startDate||todayS());
@@ -849,6 +849,23 @@ function BulkShiftForm({startDate,endDate,jobs,shifts,onSave,onDeleteRange,onMar
         class="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg text-sm font-semibold hover:bg-gray-200 transition-colors">
         ביטול</button>
     </div>
+    ${onEditRange&&html`
+      <button onClick=${()=>{
+        if(!jobId) return alert('יש לבחור משרה');
+        const rangeSet=new Set(range);
+        const inRange=(shifts||[]).filter(s=>rangeSet.has(s.date));
+        if(inRange.length===0) return alert('אין משמרות קיימות בטווח זה לעריכה');
+        if(!confirm('לעדכן '+inRange.length+' משמרות קיימות בטווח לפי הבחירה למעלה (משרה, שעות ונסיעות)?')) return;
+        const st=(job&&job.startTime)||'08:00', et=(job&&job.endTime)||'16:00';
+        const updated=inRange.map(s=>{
+          const earn=isMonthly?0:(job?((job.rateType==='daily'||job.rateType==='miluim')?job.rate:job.rate*(+hours||0)):0);
+          return {...s,jobId,hours:+hours||0,startTime:st,endTime:et,travel:+travel||0,earnings:earn};
+        });
+        onEditRange(updated);
+        onClose();
+      }}
+        class="w-full border border-blue-200 text-blue-600 py-2 rounded-lg text-sm font-medium hover:bg-blue-50 transition-colors flex items-center justify-center gap-1.5">
+        <${Icon} name="pencil" size=${14}/> ערוך משמרות קיימות בטווח</button>`}
     ${onMarkPaid&&html`
       <button onClick=${()=>{
         const rangeSet=new Set(range);
@@ -1199,16 +1216,21 @@ function ShiftsPage({shifts,setShifts,jobs}) {
   const sorted=[...ms].sort((a,b)=>b.date<a.date?-1:b.date>a.date?1:0);
 
   return html`<div class="space-y-4">
-    <div class="flex items-center justify-end flex-wrap gap-2">
-      <div class="flex rounded-lg border border-gray-200 overflow-hidden flex-shrink-0">
+    <div class="space-y-2">
+      <div class="grid grid-cols-2 gap-2">
         ${[['calendar','calendar','לוח'],['list','list','רשימה']].map(([v,ic,l])=>html`
           <button key=${v} onClick=${()=>setView(v)}
-            class=${'px-3 py-1.5 text-xs font-medium transition-colors flex items-center gap-1 whitespace-nowrap '+(view===v?'bg-blue-500 text-white':'text-gray-600 hover:bg-gray-50')}>
-            <${Icon} name=${ic} size=${13}/><span>${l}</span></button>`)}
+            class=${'py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-1.5 '+(view===v?'bg-blue-500 text-white shadow-sm':'bg-gray-100 text-gray-600 hover:bg-gray-200')}>
+            <${Icon} name=${ic} size=${15}/><span>${l}</span></button>`)}
       </div>
-      <button onClick=${()=>setBulkModal({startDate:null,endDate:null})} class="bg-blue-500 text-white px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-blue-600 transition-colors flex-shrink-0 whitespace-nowrap">+ משמרת</button>
-      <button onClick=${markMonthPaid} class="bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-emerald-600 transition-colors flex-shrink-0 whitespace-nowrap">✓ סמן חודש כשולם</button>
-      <button onClick=${()=>setDeleteModal(true)} class="bg-red-500 text-white px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-red-600 transition-colors flex items-center gap-1 flex-shrink-0 whitespace-nowrap"><${Icon} name="trash" size=${13}/> מחיקה מרובה</button>
+      <div class="grid grid-cols-3 gap-2">
+        <button onClick=${()=>setBulkModal({startDate:null,endDate:null})}
+          class="bg-blue-500 text-white px-1 py-2 rounded-lg text-xs font-semibold hover:bg-blue-600 transition-colors flex items-center justify-center gap-1 text-center leading-tight"><${Icon} name="plus" size=${14}/><span>הוסף משמרת</span></button>
+        <button onClick=${markMonthPaid}
+          class="bg-emerald-500 text-white px-1 py-2 rounded-lg text-xs font-semibold hover:bg-emerald-600 transition-colors flex items-center justify-center gap-1 text-center leading-tight"><${Icon} name="check" size=${14}/><span>סמן חודש כשולם</span></button>
+        <button onClick=${()=>setDeleteModal(true)}
+          class="bg-red-500 text-white px-1 py-2 rounded-lg text-xs font-semibold hover:bg-red-600 transition-colors flex items-center justify-center gap-1 text-center leading-tight"><${Icon} name="trash" size=${14}/><span>מחיקה מרובה</span></button>
+      </div>
     </div>
     <${MonthStrip} year=${year} month=${month} onChange=${(y,m)=>{setYear(y);setMonth(m);}}/>
 
@@ -1282,6 +1304,7 @@ function ShiftsPage({shifts,setShifts,jobs}) {
         onSave=${newShifts=>setShifts(s=>[...s,...newShifts])}
         onDeleteRange=${removeShifts}
         onMarkPaid=${markPaid}
+        onEditRange=${upd=>{const m=new Map(upd.map(u=>[u.id,u]));setShifts(arr=>arr.map(x=>m.get(x.id)||x));}}
         onClose=${()=>setBulkModal(null)}/>
     <//>`}
 
