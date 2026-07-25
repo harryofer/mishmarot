@@ -2,7 +2,7 @@
 <html lang="he" dir="rtl">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <title>מעקב משמרות | שכיר ישראלי</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/preact@10/dist/preact.umd.js"></script>
@@ -59,6 +59,10 @@ self.addEventListener('fetch',e=>{
     input[type=number] { -moz-appearance:textfield; }
     /* Drag-select highlight */
     .cal-drag { background-color:#dbeafe !important; border-color:#93c5fd !important; }
+    /* Prevent rubber-band overscroll + pinch-zoom stretching on mobile */
+    html { overscroll-behavior:none; background-color:#f8fafc; }
+    body { overscroll-behavior:none; }
+    html, body { touch-action:pan-x pan-y; }
     /* Dark mode overrides */
     :root { color-scheme: light; }
     input[type=checkbox] { accent-color:#3b82f6; }
@@ -2353,6 +2357,8 @@ function App() {
 
   useEffect(()=>{
     document.body.className=darkMode?'bg-slate-50 dark min-h-screen':'bg-slate-50 min-h-screen';
+    // Paint the page behind the app too, so iOS overscroll shows theme color instead of white
+    document.documentElement.style.backgroundColor=darkMode?'#0f172a':'#f8fafc';
   },[darkMode]);
 
   const TABS=[{id:'dashboard',label:'דשבורד',icon:'dashboard'},{id:'shifts',label:'משמרות',icon:'calendar'},{id:'jobs',label:'משרות',icon:'briefcase'},{id:'payslips',label:'תלושים',icon:'receipt'},{id:'settings',label:'הגדרות',icon:'settings'}];
