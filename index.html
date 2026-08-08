@@ -1877,10 +1877,19 @@ function GoogleDriveSection({settings,setSettings,jobs,shifts,payslips,setJobs,s
 }
 
 // ── GoogleCalendarSection ────────────────────────────────────
-function GoogleCalendarSection({jobs,shifts,setShifts}) {
+function GoogleCalendarSection({jobs,shifts,setShifts,settings,setSettings}) {
   const [busy,  setBusy]  = useState(false);
   const [status,setStatus]= useState('');
   const [scope, setScope] = useState('month');
+
+  const rem=(settings&&settings.gcalReminders)||{};
+  const setRem=(k,v)=>setSettings(s=>({...s,gcalReminders:{dayBefore:true,atStart:true,...(s.gcalReminders||{}),[k]:v}}));
+  const buildOverrides=()=>{
+    const o=[];
+    if(rem.dayBefore!==false) o.push({method:'popup',minutes:1440});
+    if(rem.atStart!==false)   o.push({method:'popup',minutes:0});
+    return o;
+  };
 
   const syncOne = async (s) => {
     const job=findJob(jobs,s.jobId);
@@ -1890,11 +1899,12 @@ function GoogleCalendarSection({jobs,shifts,setShifts}) {
     const et=s.endTime||(job&&job.endTime)||'16:00';
     let endDate=s.date;
     if(et<=st){ const nd=new Date(s.date+'T12:00:00'); nd.setDate(nd.getDate()+1); endDate=nd.toISOString().slice(0,10); }
+    const ov=buildOverrides();
     const body={
       summary:title, colorId:isMil?'10':'11',
       start:{dateTime:s.date+'T'+st+':00', timeZone:'Asia/Jerusalem'},
       end:{dateTime:endDate+'T'+et+':00', timeZone:'Asia/Jerusalem'},
-      reminders:{useDefault:false, overrides:[]}
+      reminders:{useDefault:false, overrides:ov}
     };
     const base='https://www.googleapis.com/calendar/v3/calendars/primary/events';
     if(s.gcalId){
@@ -1955,7 +1965,19 @@ function GoogleCalendarSection({jobs,shifts,setShifts}) {
   };
 
   return html`<div class="space-y-3">
-    <p class="text-xs text-gray-500">סנכרון דו-כיווני בטווח שתבחר: משמרות חדשות יתווספו/יעודכנו ביומן Google כאירועים <span class="text-red-500 font-medium">אדומים</span> (בשעות המשרה, ללא התראות), ומשמרות שמחקת יוסרו מהיומן.</p>
+    <p class="text-xs text-gray-500">סנכרון דו-כיווני בטווח שתבחר: משמרות חדשות יתווספו/יעודכנו ביומן Google כאירועים <span class="text-red-500 font-medium">אדומים</span> (בשעות המשרה), ומשמרות שמחקת יוסרו מהיומן.</p>
+    <div class="bg-slate-50 rounded-lg p-3 space-y-2">
+      <div class="text-sm font-medium text-gray-700">🔔 התראות יומן (עובדות גם כשהאפליקציה סגורה)</div>
+      <label class="flex items-center justify-between cursor-pointer select-none">
+        <span class="text-sm text-gray-600">תזכורת יום לפני העבודה</span>
+        <input type="checkbox" checked=${rem.dayBefore!==false} onChange=${e=>setRem('dayBefore',e.target.checked)} class="w-4 h-4 rounded"/>
+      </label>
+      <label class="flex items-center justify-between cursor-pointer select-none">
+        <span class="text-sm text-gray-600">תזכורת בתחילת המשמרת (לסמן הגעה)</span>
+        <input type="checkbox" checked=${rem.atStart!==false} onChange=${e=>setRem('atStart',e.target.checked)} class="w-4 h-4 rounded"/>
+      </label>
+      <p class="text-[11px] text-gray-400">ההתראה תופיע ביומן/במסך הנעילה של הטלפון עם שם המשרה. לחיצה עליה תפתח את האפליקציה. יש ללחוץ "סנכרן" למטה כדי להחיל.</p>
+    </div>
     <div>
       <label class="block text-sm font-medium text-gray-700 mb-1">טווח לסנכרון</label>
       <select value=${scope} onChange=${e=>setScope(e.target.value)}
@@ -2236,7 +2258,7 @@ function SettingsPage({settings,setSettings,jobs,shifts,setJobs,setShifts,paysli
     <div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
       <h3 class="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-1.5"><${Icon} name="calendar" size=${15}/> סנכרון ליומן Google</h3>
       <${GoogleCalendarSection}
-        jobs=${jobs} shifts=${shifts} setShifts=${setShifts}/>
+        jobs=${jobs} shifts=${shifts} setShifts=${setShifts} settings=${settings} setSettings=${setSettings}/>
     </div>
 
     <div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
