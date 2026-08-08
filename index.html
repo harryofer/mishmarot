@@ -419,6 +419,11 @@ function MonthNav({year,month,onChange}) {
 // ── MonthStrip (quick month jump bar) ────────────────────────
 function MonthStrip({year,month,onChange}) {
   const now=new Date();
+  const selRef=useRef(null);
+  useEffect(()=>{
+    const el=selRef.current;
+    if(el&&el.scrollIntoView){ try{ el.scrollIntoView({inline:'center',block:'nearest'}); }catch(e){} }
+  },[year,month]);
   return html`<div class="space-y-1.5">
     <div class="flex items-center justify-center gap-4">
       <button onClick=${()=>onChange(year-1,month)} class="text-gray-400 hover:text-gray-600 text-base px-2">‹</button>
@@ -428,7 +433,7 @@ function MonthStrip({year,month,onChange}) {
     <div class="flex gap-1.5 overflow-x-auto py-0.5">
       ${MONTHS.map((l,i)=>{
         const sel=i===month, isNow=year===now.getFullYear()&&i===now.getMonth();
-        return html`<button key=${i} onClick=${()=>onChange(year,i)}
+        return html`<button key=${i} ref=${sel?selRef:null} onClick=${()=>onChange(year,i)}
           class=${'flex-shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-colors '+(sel?'bg-blue-500 text-white':isNow?'bg-blue-50 text-blue-600 border border-blue-200':'bg-gray-100 text-gray-600 hover:bg-gray-200')}>
           ${l}</button>`;
       })}
