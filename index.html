@@ -17,33 +17,14 @@
   <meta name="theme-color" content="#3b82f6">
   <link rel="icon" href="./icon.jpg">
   <link rel="apple-touch-icon" href="./icon.jpg">
+  <link rel="manifest" href="./manifest.json">
   <script>
-  // PWA manifest (blob works in Chrome/Edge on HTTPS)
   (function(){
-    try {
-      const iconUrl=new URL('icon.jpg', location.href).href;
-      const m={name:'מעקב משמרות',short_name:'משמרות',start_url:'./',
-        display:'standalone',background_color:'#f8fafc',theme_color:'#3b82f6',lang:'he',dir:'rtl',
-        icons:[{src:iconUrl,sizes:'1024x1024',type:'image/jpeg',purpose:'any'},
-               {src:iconUrl,sizes:'1024x1024',type:'image/jpeg',purpose:'maskable'}]};
-      const l=document.createElement('link');l.rel='manifest';
-      l.href=URL.createObjectURL(new Blob([JSON.stringify(m)],{type:'application/manifest+json'}));
-      document.head.appendChild(l);
-    } catch(e){}
-    // Service Worker (HTTPS only)
+    // Service Worker — real file, so offline works (blob URLs are rejected on iOS/Safari)
     if('serviceWorker' in navigator && location.protocol!=='file:') {
-      const sw=`const C='sw-v1';
-self.addEventListener('install',()=>self.skipWaiting());
-self.addEventListener('activate',e=>e.waitUntil(clients.claim()));
-self.addEventListener('fetch',e=>{
-  if(e.request.method!=='GET')return;
-  e.respondWith(caches.open(C).then(c=>c.match(e.request).then(h=>h||fetch(e.request).then(r=>{
-    if(r.ok&&r.type!=='opaque')c.put(e.request,r.clone());return r;
-  }))));
-});`;
-      navigator.serviceWorker.register(
-        URL.createObjectURL(new Blob([sw],{type:'text/javascript'}))
-      ).catch(()=>{});
+      window.addEventListener('load',()=>{
+        navigator.serviceWorker.register('./sw.js').catch(()=>{});
+      });
     }
   })();
   </script>
@@ -2362,6 +2343,14 @@ function App() {
   const greet=gHour>=5&&gHour<12?'בוקר טוב':gHour>=12&&gHour<17?'צהריים טובים':gHour>=17&&gHour<21?'ערב טוב':'לילה טוב';
   const greetLine=firstName?greet+' '+firstName:'ניהול הכנסות לשכיר ישראלי';
 
+  // Offline indicator
+  const [online,setOnline]=useState(()=>navigator.onLine!==false);
+  useEffect(()=>{
+    const on=()=>setOnline(true), off=()=>setOnline(false);
+    window.addEventListener('online',on); window.addEventListener('offline',off);
+    return ()=>{ window.removeEventListener('online',on); window.removeEventListener('offline',off); };
+  },[]);
+
   useReminders(shifts,settings,setShifts);
 
   // Auto Google sign-in on load: (1) reuse saved token, (2) silent attempt,
@@ -2404,7 +2393,13 @@ function App() {
     <header class="bg-white border-b border-gray-200 sticky top-0 z-40 shadow-sm">
       <div class="max-w-2xl mx-auto px-4">
         <div class="flex items-center justify-between py-3">
-          <div><div class="font-bold text-gray-800">מעקב משמרות</div><div class="text-xs text-gray-400">${greetLine}</div></div>
+          <div>
+            <div class="font-bold text-gray-800 flex items-center gap-1.5">
+              מעקב משמרות
+              ${!online&&html`<span class="text-[10px] font-medium bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">לא מקוון</span>`}
+            </div>
+            <div class="text-xs text-gray-400">${greetLine}</div>
+          </div>
           <div class="flex items-center gap-3">
             <button onClick=${togglePrivacy}
               class=${'rounded-lg p-2 transition-colors text-gray-500 '+(privacy?'bg-blue-50 text-blue-600':'hover:bg-gray-100')}

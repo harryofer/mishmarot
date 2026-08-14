@@ -1,0 +1,15 @@
+{
+  "name": "מעקב משמרות",
+  "short_name": "משמרות",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#3b82f6",
+  "lang": "he",
+  "dir": "rtl",
+  "icons": [
+    { "src": "./icon.jpg", "sizes": "1024x1024", "type": "image/jpeg", "purpose": "any" },
+    { "src": "./icon.jpg", "sizes": "1024x1024", "type": "image/jpeg", "purpose": "maskable" }
+  ]
+}
