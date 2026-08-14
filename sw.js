@@ -31,6 +31,33 @@ self.addEventListener('activate', e => {
   );
 });
 
+// ── Web Push: show the notification the server sent ──────────
+self.addEventListener('push', e => {
+  let d = { title: 'מעקב משמרות', body: '' };
+  try { if (e.data) d = Object.assign(d, e.data.json()); } catch (_) {
+    try { d.body = e.data.text(); } catch (_) {}
+  }
+  e.waitUntil(self.registration.showNotification(d.title, {
+    body: d.body,
+    icon: './icon.jpg',
+    badge: './icon.jpg',
+    tag: d.tag || 'mishmarot',
+    data: { url: d.url || './' }
+  }));
+});
+
+// Tapping the notification focuses the app if it's open, otherwise opens it
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  const target = (e.notification.data && e.notification.data.url) || './';
+  e.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
+      for (const c of list) if ('focus' in c) return c.focus();
+      return self.clients.openWindow(target);
+    })
+  );
+});
+
 self.addEventListener('fetch', e => {
   const req = e.request;
   if (req.method !== 'GET') return;

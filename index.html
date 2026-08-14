@@ -2132,6 +2132,95 @@ function SettingsPage({settings,setSettings,jobs,shifts,setJobs,setShifts,paysli
     else alert('לא ניתן אישור להתראות. יש לאשר בהגדרות הדפדפן.');
   };
 
+  // ── Background push (needs the free Cloudflare Worker) ──
+  const [pushBusy,setPushBusy]=useState(false);
+  const [pushMsg,setPushMsg]=useState('');
+  const [pushOn,setPushOn]=useState(false);
+  const pushUrl=((settings&&settings.pushUrl)||'').replace(/\/+$/,'');
+
+  useEffect(()=>{
+    if(!('serviceWorker' in navigator)||!('PushManager' in window)) return;
+    navigator.serviceWorker.ready
+      .then(r=>r.pushManager.getSubscription())
+      .then(s=>setPushOn(!!s)).catch(()=>{});
+  },[]);
+
+  const enablePush=async()=>{
+    if(!pushUrl) return alert('יש להזין תחילה את כתובת שרת ההתראות');
+    if(!('serviceWorker' in navigator)||!('PushManager' in window))
+      return alert('הדפדפן לא תומך בהתראות רקע. באייפון יש להוסיף את האתר למסך הבית ולפתוח משם.');
+    setPushBusy(true); setPushMsg('מפעיל...');
+    try{
+      let p=Notification.permission;
+      if(p!=='granted'){ p=await Notification.requestPermission(); setNotifPerm(p); }
+      if(p!=='granted'){ setPushMsg('לא ניתן אישור להתראות'); setPushBusy(false); return; }
+
+      const keyRes=await fetch(pushUrl+'/key');
+      const {key}=await keyRes.json();
+      const raw=atob(key.replace(/-/g,'+').replace(/_/g,'/'));
+      const appKey=new Uint8Array(raw.length);
+      for(let i=0;i<raw.length;i++) appKey[i]=raw.charCodeAt(i);
+
+      const reg=await navigator.serviceWorker.ready;
+      const sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:appKey});
+      await syncPush(sub);
+      setPushOn(true); setPushMsg('הופעל ✓ ההתראות יגיעו גם כשהאפליקציה סגורה');
+    }catch(e){ setPushMsg('שגיאה: '+e.message); }
+    setPushBusy(false);
+  };
+
+  const syncPush=async(subArg)=>{
+    if(!pushUrl) return;
+    const reg=await navigator.serviceWorker.ready;
+    const sub=subArg||await reg.pushManager.getSubscription();
+    if(!sub) return;
+    const t=todayS();
+    const soon=new Date(); soon.setDate(soon.getDate()+90);
+    const until=soon.toISOString().slice(0,10);
+    await fetch(pushUrl+'/subscribe',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        sub:sub.toJSON(),
+        reminders:(settings&&settings.notify)||{},
+        shiftDates:[...new Set(shifts.filter(s=>s.date>=t&&s.date<=until).map(s=>s.date))]
+      })
+    });
+  };
+
+  const disablePush=async()=>{
+    setPushBusy(true);
+    try{
+      const reg=await navigator.serviceWorker.ready;
+      const sub=await reg.pushManager.getSubscription();
+      if(sub){
+        if(pushUrl) await fetch(pushUrl+'/unsubscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({endpoint:sub.endpoint})}).catch(()=>{});
+        await sub.unsubscribe();
+      }
+      setPushOn(false); setPushMsg('כובה');
+    }catch(e){ setPushMsg('שגיאה: '+e.message); }
+    setPushBusy(false);
+  };
+
+  const testPush=async()=>{
+    setPushBusy(true); setPushMsg('שולח בדיקה...');
+    try{
+      const reg=await navigator.serviceWorker.ready;
+      const sub=await reg.pushManager.getSubscription();
+      if(!sub){ setPushMsg('לא רשום'); setPushBusy(false); return; }
+      const r=await fetch(pushUrl+'/test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({endpoint:sub.endpoint})});
+      const j=await r.json();
+      setPushMsg(j.ok?'נשלח ✓ ההתראה אמורה להופיע':'שגיאה מהשרת: '+(j.error||j.status));
+    }catch(e){ setPushMsg('שגיאה: '+e.message); }
+    setPushBusy(false);
+  };
+
+  // Keep the server's copy of the schedule + upcoming shifts fresh
+  useEffect(()=>{
+    if(!pushOn||!pushUrl) return;
+    const id=setTimeout(()=>{ syncPush().catch(()=>{}); },1500);
+    return ()=>clearTimeout(id);
+  },[pushOn,pushUrl,shifts,settings&&settings.notify]);
+
   return html`<div class="space-y-4">
     <h2 class="text-base font-bold text-gray-800">הגדרות</h2>
     <div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm space-y-3">
@@ -2224,8 +2313,30 @@ function SettingsPage({settings,setSettings,jobs,shifts,setJobs,setShifts,paysli
                 </div>
 
               </div>`}`}
+
+      <div class="border-t border-gray-100 pt-3 space-y-2">
+        <div class="text-sm font-medium text-gray-700">📡 התראות רקע (גם כשהאפליקציה סגורה)</div>
+        <div>
+          <label class="block text-xs text-gray-400 mb-1">כתובת שרת ההתראות</label>
+          <input value=${pushUrl} onInput=${e=>setSettings(s=>({...s,pushUrl:e.target.value}))}
+            placeholder="https://mishmarot-push.<שם>.workers.dev" dir="ltr"
+            class="w-full border border-gray-200 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-300"/>
+        </div>
+        ${!pushOn
+          ? html`<button onClick=${enablePush} disabled=${pushBusy||!pushUrl}
+              class="w-full bg-blue-500 text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-blue-600 disabled:opacity-50">
+              ${pushBusy?'...':'הפעל התראות רקע'}</button>`
+          : html`<div class="grid grid-cols-2 gap-2">
+              <button onClick=${testPush} disabled=${pushBusy}
+                class="bg-emerald-500 text-white py-2 rounded-lg text-sm font-semibold hover:bg-emerald-600 disabled:opacity-50">שלח בדיקה</button>
+              <button onClick=${disablePush} disabled=${pushBusy}
+                class="bg-gray-100 text-gray-700 py-2 rounded-lg text-sm font-semibold hover:bg-gray-200 disabled:opacity-50">כבה</button>
+            </div>`}
+        ${pushMsg&&html`<div class=${'text-xs text-center py-1.5 px-3 rounded-lg '+(pushMsg.includes('שגיאה')?'bg-red-50 text-red-600':'bg-blue-50 text-blue-700')}>${pushMsg}</div>`}
+      </div>
+
       <div class="text-[11px] text-gray-400 bg-slate-50 rounded-lg p-2 leading-4">
-        ההתראה תופיע בפעם הראשונה שהאפליקציה פתוחה אחרי השעה שנקבעה (פעם ביום). בתזכורת "אישור הגעה" אפשר להקיש על ההתראה כדי לסמן שהגעת. באייפון נדרש להוסיף את האתר למסך הבית תחילה.
+        ללא שרת התראות, התזכורות מופיעות רק כשהאפליקציה פתוחה. עם שרת — גם כשהיא סגורה. באייפון חובה להוסיף את האתר למסך הבית ולפתוח משם.
       </div>
     </div>
 
