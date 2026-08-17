@@ -15,6 +15,9 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="משמרות">
   <meta name="theme-color" content="#3b82f6">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&display=swap">
   <link rel="icon" href="./icon.jpg">
   <link rel="apple-touch-icon" href="./icon.jpg">
   <link rel="manifest" href="./manifest.json">
@@ -136,6 +139,76 @@
     .dark ::-webkit-scrollbar-thumb { background:#475569; }
     /* Toggle switch animation */
     .toggle-thumb { transition: transform .2s; }
+
+    /* ══ Hero — the money moment ══════════════════════════════
+       Dark mode is the primary theme here, so the hero is designed
+       for it first: a warm charcoal slab (not the cold slate used
+       everywhere else) lit by a gold bloom behind the figure. */
+    .hero {
+      position:relative; overflow:hidden;
+      background:#17141C; border-radius:1.25rem;
+      padding:1.5rem 1.25rem 1.25rem;
+      box-shadow:0 18px 40px -18px rgba(0,0,0,.8);
+    }
+    .hero::before {                       /* the bloom */
+      content:''; position:absolute; inset:-40% 20% auto -20%; height:200%;
+      background:radial-gradient(60% 45% at 30% 25%, rgba(245,181,68,.30), transparent 70%);
+      pointer-events:none;
+    }
+    .hero::after {                        /* fine grain so the slab is not flat */
+      content:''; position:absolute; inset:0; pointer-events:none; opacity:.35;
+      background-image:radial-gradient(rgba(255,255,255,.055) 1px, transparent 1px);
+      background-size:3px 3px;
+    }
+    .hero > * { position:relative; z-index:1; }
+    .hero-label { color:#B9AFA0; font-size:.75rem; letter-spacing:.02em; }
+    .hero-amount {
+      font-family:'Sora',system-ui,sans-serif; font-weight:700;
+      font-size:clamp(2.6rem,13vw,3.6rem); line-height:1; letter-spacing:-.035em;
+      color:#FFC96B; text-shadow:0 0 34px rgba(245,181,68,.35);
+      font-variant-numeric:tabular-nums; direction:ltr; display:inline-block;
+    }
+    .hero-chip.paid { background:rgba(94,227,192,.14); border-color:rgba(94,227,192,.28); color:#8FEBD2; }
+    .hero-cur { font-size:.44em; font-weight:600; opacity:.6; margin-inline-end:.12em; vertical-align:.30em; }
+    .hero-sub { color:#9C9284; font-size:.75rem; }
+    /* the month strip should scroll without showing a bar */
+    .month-strip { scrollbar-width:none; -ms-overflow-style:none; }
+    .month-strip::-webkit-scrollbar { display:none; }
+    .hero-chip {
+      display:inline-flex; align-items:center; gap:.3rem;
+      background:rgba(255,255,255,.07); border:1px solid rgba(255,255,255,.10);
+      color:#E6DED2; border-radius:999px; padding:.25rem .6rem; font-size:.7rem;
+    }
+    .hero-stat { color:#EFE8DE; font-weight:700; font-size:.95rem; font-variant-numeric:tabular-nums; }
+    .hero-track { height:5px; border-radius:999px; background:rgba(255,255,255,.10); overflow:hidden; }
+    .hero-fill  { height:100%; border-radius:999px; background:linear-gradient(90deg,#F5B544,#FFD98A); }
+    /* Primary action sits on the slab and glows */
+    .hero-cta {
+      width:100%; border:0; border-radius:.85rem; padding:.8rem 1rem;
+      font-weight:700; font-size:.9rem; cursor:pointer;
+      background:linear-gradient(180deg,#F5B544,#E09A22); color:#241A06;
+      box-shadow:0 8px 20px -8px rgba(245,181,68,.75);
+      display:flex; align-items:center; justify-content:center; gap:.45rem;
+    }
+    .hero-cta.done {
+      background:rgba(255,255,255,.08); color:#CFC6B8;
+      border:1px solid rgba(255,255,255,.14); box-shadow:none;
+    }
+    .hero-cta:active { transform:scale(.985); }
+    /* Light theme keeps the same slab so the identity does not change */
+    @keyframes heroIn { from { opacity:0; transform:translateY(6px) } to { opacity:1; transform:none } }
+    .hero { animation:heroIn .32s cubic-bezier(.2,.7,.3,1) both; }
+
+    /* Cards keep a little lift so they read as one family with the hero
+       instead of flat rectangles sitting under a rich slab. */
+    .dark .bg-white {
+      background-color:#1B1F27 !important;
+      border-color:#2A303B !important;
+      box-shadow:0 1px 0 rgba(255,255,255,.03) inset, 0 6px 18px -14px rgba(0,0,0,.9) !important;
+    }
+    .dark body { background-color:#101319 !important; }
+    .dark .bg-slate-50 { background-color:#151922 !important; }
+    .dark .rounded-xl { border-radius:.85rem; }
 
     /* ── Unified polish ── */
     body { font-family: 'Segoe UI', system-ui, -apple-system, 'Heebo', sans-serif; -webkit-font-smoothing: antialiased; }
@@ -411,7 +484,7 @@ function MonthStrip({year,month,onChange}) {
       <span class="text-sm font-bold text-gray-700 w-14 text-center">${year}</span>
       <button onClick=${()=>onChange(year+1,month)} class="text-gray-400 hover:text-gray-600 text-base px-2">›</button>
     </div>
-    <div class="flex gap-1.5 overflow-x-auto py-0.5">
+    <div class="month-strip flex gap-1.5 overflow-x-auto py-0.5">
       ${MONTHS.map((l,i)=>{
         const sel=i===month, isNow=year===now.getFullYear()&&i===now.getMonth();
         return html`<button key=${i} ref=${sel?selRef:null} onClick=${()=>onChange(year,i)}
@@ -419,6 +492,70 @@ function MonthStrip({year,month,onChange}) {
           ${l}</button>`;
       })}
     </div>
+  </div>`;
+}
+
+// Counts the hero figure up on open — the one flourish, skipped when the
+// value is hidden by privacy mode or the user asked for less motion.
+function useCountUp(target, active) {
+  const [v,setV]=useState(active?0:target);
+  useEffect(()=>{
+    if(!active){ setV(target); return; }
+    if(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches){ setV(target); return; }
+    let raf, t0=null; const dur=700, from=0;
+    const step=t=>{ if(t0===null)t0=t;
+      const p=Math.min(1,(t-t0)/dur), e=1-Math.pow(1-p,3);
+      setV(from+(target-from)*e);
+      if(p<1) raf=requestAnimationFrame(step);
+    };
+    raf=requestAnimationFrame(step);
+    return ()=>cancelAnimationFrame(raf);
+  },[target,active]);
+  return v;
+}
+
+// ── DashboardHero ────────────────────────────────────────────
+function DashboardHero({net,gross,deductions,daysWorked,monthLabel,allPaid,todayShifts,todayArrived,onToggleArrived,onAddShift,monthProgress}) {
+  const animate = !_privacy;
+  const shown = useCountUp(net, animate);
+  const hasToday = todayShifts.length>0;
+  return html`<div class="hero">
+    <div class="flex items-center justify-between gap-2 mb-1">
+      <span class="hero-label">נטו ב${monthLabel}</span>
+      <span class="flex items-center gap-1.5 flex-shrink-0">
+        <span class="hero-chip"><${Icon} name="calendar" size=${12}/> ${daysWorked}</span>
+        <span class=${'hero-chip'+(allPaid?' paid':'')}>${allPaid?'שולם':'טרם שולם'}</span>
+      </span>
+    </div>
+
+    <div class="hero-amount">
+      <span class="hero-cur">₪</span>${_privacy?'•••':Math.round(shown).toLocaleString('he-IL')}
+    </div>
+
+    <div class="flex items-center gap-4 mt-3">
+      <div>
+        <div class="hero-sub">ברוטו</div>
+        <div class="hero-stat">${fmt(gross)}</div>
+      </div>
+      <div class="w-px self-stretch" style="background:rgba(255,255,255,.10)"></div>
+      <div>
+        <div class="hero-sub">ניכויים</div>
+        <div class="hero-stat">−${fmt(deductions)}</div>
+      </div>
+    </div>
+
+    <div class="mt-3 mb-4">
+      <div class="hero-track"><div class="hero-fill" style=${{width:Math.round(monthProgress*100)+'%'}}></div></div>
+    </div>
+
+    ${hasToday
+      ? html`<button class=${'hero-cta'+(todayArrived?' done':'')} onClick=${onToggleArrived}>
+          <${Icon} name="check" size=${16}/>
+          ${todayArrived?'סימנת שהגעת היום':'הגעתי היום לעבודה'}
+        </button>`
+      : html`<button class="hero-cta" onClick=${onAddShift}>
+          <${Icon} name="plus" size=${16}/> הוסף משמרת
+        </button>`}
   </div>`;
 }
 
@@ -1612,27 +1749,19 @@ function DashboardPage({shifts,setShifts,jobs,settings,payslips,expenses,setTab}
     </div>
     <${MonthStrip} year=${year} month=${month} onChange=${(y,m)=>{setYear(y);setMonth(m);}}/>
 
-    ${todayShifts.length>0&&html`
-      <button onClick=${toggleArrivedToday}
-        class=${'w-full py-3 rounded-xl text-sm font-bold transition-colors flex items-center justify-center gap-2 '+
-          (todayArrived
-            ?'bg-blue-500 text-white hover:bg-blue-600'
-            :'bg-white border-2 border-blue-300 text-blue-600 hover:bg-blue-50 shadow-sm')}>
-        <${Icon} name="check" size=${17}/>
-        ${todayArrived?'הגעת היום למשמרת — הקש לביטול':'הגעתי היום למשמרת'}
-      </button>`}
+    <${DashboardHero}
+      net=${d.nA.net} gross=${d.gA} deductions=${d.nA.total}
+      daysWorked=${d.past.length} monthLabel=${MONTHS[month]} allPaid=${allPaid}
+      todayShifts=${todayShifts} todayArrived=${todayArrived}
+      onToggleArrived=${toggleArrivedToday}
+      onAddShift=${()=>setTab&&setTab('shifts')}
+      monthProgress=${(()=>{
+        const dim=mDays(year,month);
+        const isCur=year===now.getFullYear()&&month===now.getMonth();
+        return isCur ? now.getDate()/dim : (d.ms.length?1:0);
+      })()}/>
 
-    ${d.monthlyTotal>0&&html`
-      <div class="bg-blue-50 border border-blue-100 rounded-xl px-4 py-2.5 text-sm text-blue-700 flex items-center gap-2">
-        <${Icon} name="briefcase" size=${16}/>
-        <span>כולל שכר חודשי קבוע: <strong>${fmt(d.monthlyTotal)}</strong></span>
-      </div>`}
-
-    <div class="grid grid-cols-3 gap-3">
-      <${StatCard} label="ברוטו"      value=${fmt(d.gA)}        sub=${d.past.length+' משמרות'}       color="blue"   icon=${html`<${Icon} name="coins" size=${17}/>`}/>
-      <${StatCard} label="נטו משוער"  value=${fmt(d.nA.net)}    sub=${fmt(d.nA.total)+' ניכויים'}   color="purple" icon=${html`<${Icon} name="wallet" size=${17}/>`}/>
-      <${StatCard} label="שולם?"      value=${allPaid?'כן':'לא'} sub=${allPaid?'שולם':'טרם שולם'}  color=${allPaid?'green':'red'} icon=${html`<${Icon} name=${allPaid?'check':'clock'} size=${17}/>`}/>
-    </div>
+    ${d.monthlyTotal>0&&html`<div class="text-xs text-gray-500">כולל שכר חודשי קבוע ${fmt(d.monthlyTotal)}</div>`}
 
     ${expTotal>0&&html`
       <button onClick=${()=>setTab&&setTab('expenses')}
@@ -1640,7 +1769,7 @@ function DashboardPage({shifts,setShifts,jobs,settings,payslips,expenses,setTab}
         <span class="text-amber-600 flex-shrink-0"><${Icon} name="wallet" size=${15}/></span>
         <span class="text-xs text-gray-600 flex-1 min-w-0 truncate">הוצאות להחזר</span>
         <span class="text-sm font-bold text-amber-600 flex-shrink-0">${fmt(expPending)}</span>
-        <span class="text-gray-300 flex-shrink-0 text-xs">›</span>
+        <span class="text-gray-300 flex-shrink-0"><${Icon} name="external" size=${13}/></span>
       </button>`}
 
     ${monthPayslips.length===0
@@ -1648,7 +1777,7 @@ function DashboardPage({shifts,setShifts,jobs,settings,payslips,expenses,setTab}
           class="w-full bg-white rounded-xl border border-gray-100 px-3 py-2 shadow-sm flex items-center gap-2 text-right hover:bg-gray-50 transition-colors">
           <span class="text-gray-400 flex-shrink-0"><${Icon} name="receipt" size=${15}/></span>
           <span class="text-xs text-gray-400 flex-1 min-w-0 truncate">לא צורף תלוש לחודש זה</span>
-          <span class="text-gray-300 flex-shrink-0 text-xs">›</span>
+          <span class="text-gray-300 flex-shrink-0"><${Icon} name="external" size=${13}/></span>
         </button>`
       : html`<div class="bg-white rounded-xl border border-gray-100 px-3 py-2 shadow-sm space-y-1">
           ${monthPayslips.map(p=>{const pj=p.jobId?findJob(jobs,p.jobId):null;return html`
