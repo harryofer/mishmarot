@@ -1636,6 +1636,14 @@ function DashboardPage({shifts,setShifts,jobs,settings,payslips,setTab}) {
             </select>
           </div>
         </div>
+        ${(()=>{
+          const list=shareList(), t=todayS();
+          const miss=list.filter(s=>s.date<=t&&!s.arrived).length;
+          return html`<div class="text-xs text-gray-500 bg-slate-50 rounded-lg px-3 py-2">
+            ${list.length===1?'משמרת אחת':list.length+' משמרות'} ${shareScope==='all'?sharePeriod():'ב'+sharePeriod()}
+            ${miss>0&&html`<span class="text-amber-600"> · ${miss===1?'אחת ללא אישור הגעה':miss+' ללא אישור הגעה'}</span>`}
+          </div>`;
+        })()}
         <button onClick=${shareWhatsApp} class="w-full text-sm bg-emerald-50 text-emerald-700 py-2.5 rounded-lg hover:bg-emerald-100 font-medium flex items-center justify-center gap-2">
           <${Icon} name="chat" size=${15}/> שתף בוואטסאפ
         </button>
