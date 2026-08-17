@@ -1459,13 +1459,17 @@ function ShiftsPage({shifts,setShifts,jobs}) {
 }
 
 // ── DashboardPage ────────────────────────────────────────────
-function DashboardPage({shifts,setShifts,jobs,settings,payslips,setTab}) {
+function DashboardPage({shifts,setShifts,jobs,settings,payslips,expenses,setTab}) {
   const now=new Date();
   const [year,setYear]=useState(now.getFullYear());
   const [month,setMonth]=useState(now.getMonth());
   const today=todayS();
   const monthKey=year+'-'+String(month+1).padStart(2,'0');
   const monthPayslips=(payslips||[]).filter(p=>p.month===monthKey);
+  // Reimbursements are tracked apart from salary — they are not taxable income
+  const monthExpenses=(expenses||[]).filter(x=>x.date.slice(0,7)===monthKey);
+  const expTotal=monthExpenses.reduce((n,x)=>n+(x.amount||0),0);
+  const expPending=monthExpenses.filter(x=>!x.reimbursed).reduce((n,x)=>n+(x.amount||0),0);
 
   const d=useMemo(()=>{
     const ms=shifts.filter(s=>{const[y,m]=s.date.split('-').map(Number);return y===year&&m===month+1;});
@@ -1530,11 +1534,28 @@ function DashboardPage({shifts,setShifts,jobs,settings,payslips,setTab}) {
     const [y,m]=shareScope.split('-').map(Number);
     return MONTHS[m-1]+' '+y;
   };
+  // Expenses matching the same period/job selection. Already-reimbursed ones are
+  // left out so the request never asks for the same money twice. Images are never shared.
+  const shareExpenses=()=>{
+    let list=(expenses||[]).filter(x=>!x.reimbursed);
+    if(shareScope!=='all') list=list.filter(x=>x.date.slice(0,7)===shareScope);
+    if(shareJob!=='all')   list=list.filter(x=>x.jobId===shareJob);
+    return list.sort((a,b)=>a.date<b.date?-1:1);
+  };
+
   const shareText=()=>{
     const list=shareList();
     const names=[...new Set(list.map(s=>s.jobId))].map(id=>{const j=findJob(jobs,id);return j?j.name:null;}).filter(Boolean);
     const nameStr=names.length?names.join(', ')+' ':'';
-    return 'סיכום עבודה '+nameStr+'- '+sharePeriod()+'\nימי עבודה - '+list.length;
+    let txt='סיכום עבודה '+nameStr+'- '+sharePeriod()+'\nימי עבודה - '+list.length;
+    const ex=shareExpenses();
+    if(ex.length){
+      const dm=x=>{const p=x.date.split('-');return p[2]+'/'+p[1];};
+      txt+='\n\nהוצאות להחזר:';
+      ex.forEach(x=>{ txt+='\n'+dm(x)+' - '+(x.desc||(EXP_CATS.find(c=>c.id===x.cat)||{}).label||'הוצאה')+' - '+Math.round(x.amount)+' ש"ח'; });
+      txt+='\nסה"כ להחזר - '+Math.round(ex.reduce((n,x)=>n+(x.amount||0),0))+' ש"ח';
+    }
+    return txt;
   };
   // Warn before sharing if some shifts in range were never confirmed as attended
   const confirmArrival=()=>{
@@ -1564,6 +1585,17 @@ function DashboardPage({shifts,setShifts,jobs,settings,payslips,setTab}) {
       tbl+='<tr>'+cells.map(c=>{const s2=String(c);return '<td>'+escapeHtml(/^[=+\-@]/.test(s2)?"'"+s2:s2)+'</td>';}).join('')+'</tr>';
     });
     tbl+='</table>';
+    // Expenses table (amounts + dates only — receipt images are never included)
+    const ex=shareExpenses();
+    if(ex.length){
+      const cell=c=>{const s2=String(c);return '<td>'+escapeHtml(/^[=+\-@]/.test(s2)?"'"+s2:s2)+'</td>';};
+      tbl+='<br/><table border="1"><tr><th>תאריך</th><th>תיאור</th><th>סכום (₪)</th></tr>';
+      ex.forEach(x=>{
+        const label=x.desc||(EXP_CATS.find(c=>c.id===x.cat)||{}).label||'הוצאה';
+        tbl+='<tr>'+cell(x.date)+cell(label)+cell(Math.round(x.amount))+'</tr>';
+      });
+      tbl+='<tr><td></td><td><b>סה"כ להחזר</b></td>'+cell(Math.round(ex.reduce((n,x)=>n+(x.amount||0),0)))+'</tr></table>';
+    }
     const content='<html><head><meta charset="utf-8"></head><body>'+tbl+'</body></html>';
     const blob=new Blob([content],{type:'application/vnd.ms-excel'});
     const name='משמרות_'+sharePeriod().replace(/\s/g,'_')+'.xls';
@@ -1602,6 +1634,19 @@ function DashboardPage({shifts,setShifts,jobs,settings,payslips,setTab}) {
       <${StatCard} label="שולם?"      value=${allPaid?'כן':'לא'} sub=${allPaid?'שולם':'טרם שולם'}  color=${allPaid?'green':'red'} icon=${html`<${Icon} name=${allPaid?'check':'clock'} size=${17}/>`}/>
     </div>
 
+    ${expTotal>0&&html`
+      <div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+        <div class="flex items-center justify-between mb-1">
+          <h3 class="text-sm font-semibold text-gray-700 flex items-center gap-1.5"><${Icon} name="wallet" size=${15}/> הוצאות להחזר</h3>
+          <button onClick=${()=>setTab&&setTab('expenses')} class="text-xs text-blue-600 hover:underline">ניהול הוצאות</button>
+        </div>
+        <div class="flex items-baseline gap-2">
+          <span class="text-xl font-bold text-amber-600">${fmt(expPending)}</span>
+          <span class="text-xs text-gray-400">ממתין להחזר${expTotal!==expPending?' · מתוך '+fmt(expTotal)+' החודש':''}</span>
+        </div>
+        <div class="text-[11px] text-gray-400 mt-1">מוצג בנפרד — החזר הוצאות אינו חלק מהשכר ואינו חייב במס.</div>
+      </div>`}
+
     <div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
       <div class="flex items-center justify-between mb-1">
         <h3 class="text-sm font-semibold text-gray-700 flex items-center gap-1.5"><${Icon} name="receipt" size=${15}/> תלוש שכר לחודש זה</h3>
@@ -1639,9 +1684,17 @@ function DashboardPage({shifts,setShifts,jobs,settings,payslips,setTab}) {
         ${(()=>{
           const list=shareList(), t=todayS();
           const miss=list.filter(s=>s.date<=t&&!s.arrived).length;
-          return html`<div class="text-xs text-gray-500 bg-slate-50 rounded-lg px-3 py-2">
-            ${list.length===1?'משמרת אחת':list.length+' משמרות'} ${shareScope==='all'?sharePeriod():'ב'+sharePeriod()}
-            ${miss>0&&html`<span class="text-amber-600"> · ${miss===1?'אחת ללא אישור הגעה':miss+' ללא אישור הגעה'}</span>`}
+          const ex=shareExpenses();
+          const exTotal=ex.reduce((n,x)=>n+(x.amount||0),0);
+          return html`<div class="text-xs text-gray-500 bg-slate-50 rounded-lg px-3 py-2 space-y-0.5">
+            <div>
+              ${list.length===1?'משמרת אחת':list.length+' משמרות'} ${shareScope==='all'?sharePeriod():'ב'+sharePeriod()}
+              ${miss>0&&html`<span class="text-amber-600"> · ${miss===1?'אחת ללא אישור הגעה':miss+' ללא אישור הגעה'}</span>`}
+            </div>
+            ${ex.length>0&&html`<div>
+              + ${ex.length===1?'הוצאה אחת':ex.length+' הוצאות'} להחזר · סה"כ ${fmt(exTotal)}${' '}
+              <span class="text-gray-400">(ללא תמונות)</span>
+            </div>`}
           </div>`;
         })()}
         <button onClick=${shareWhatsApp} class="w-full text-sm bg-emerald-50 text-emerald-700 py-2.5 rounded-lg hover:bg-emerald-100 font-medium flex items-center justify-center gap-2">
@@ -1813,7 +1866,7 @@ function CalcPage({shifts,jobs,settings,setSettings}) {
 }
 
 // ── GoogleDriveSection ───────────────────────────────────────
-function GoogleDriveSection({settings,setSettings,jobs,shifts,payslips,setJobs,setShifts,setPayslips}) {
+function GoogleDriveSection({settings,setSettings,jobs,shifts,payslips,expenses,setJobs,setShifts,setPayslips,setExpenses}) {
   const [token,  setToken]  = useState(()=>_gToken);
   const [status, setStatus] = useState('');
   const [busy,   setBusy]   = useState(false);
@@ -1901,7 +1954,7 @@ function GoogleDriveSection({settings,setSettings,jobs,shifts,payslips,setJobs,s
     if (!token) return;
     setBusy(true); setStatus('מגבה...');
     try {
-      const content = JSON.stringify({jobs,shifts,payslips,settings,exportedAt:new Date().toISOString()},null,2);
+      const content = JSON.stringify({jobs,shifts,payslips,expenses,settings,exportedAt:new Date().toISOString()},null,2);
       const existId = await findFile();
       if (existId) {
         await fetch('https://www.googleapis.com/upload/drive/v3/files/'+encodeURIComponent(existId)+'?uploadType=media',
@@ -1933,6 +1986,9 @@ function GoogleDriveSection({settings,setSettings,jobs,shifts,payslips,setJobs,s
       if (Array.isArray(d.shifts))  setShifts(d.shifts.filter(s=>s&&typeof s==='object'&&typeof s.date==='string')
         .map(s=>idOk(s.gcalId)?s:{...s,gcalId:undefined}));
       if (Array.isArray(d.payslips))setPayslips(d.payslips.filter(p=>p&&typeof p==='object'&&safeUrl(p.driveLink)&&idOk(p.driveFileId)));
+      if (Array.isArray(d.expenses)&&setExpenses)setExpenses(d.expenses
+        .filter(x=>x&&typeof x==='object'&&typeof x.date==='string'&&typeof x.amount==='number')
+        .map(x=>(x.driveLink&&safeUrl(x.driveLink)&&idOk(x.driveFileId))?x:{...x,driveLink:undefined,driveFileId:undefined}));
       if (d.settings&&typeof d.settings==='object'){
         const {darkMode,gClientId,gConnected,...rest}=d.settings;
         setSettings(s=>({...s,...rest}));
@@ -2097,6 +2153,178 @@ function GoogleCalendarSection({jobs,shifts,setShifts,settings,setSettings}) {
 }
 
 // ── PayslipsPage ─────────────────────────────────────────────
+// ── ExpensesPage (out-of-pocket work costs awaiting reimbursement) ──
+const EXP_CATS=[{id:'fuel',label:'דלק',icon:'car'},{id:'tools',label:'כלים/חלקים',icon:'folder'},{id:'other',label:'אחר',icon:'wallet'}];
+
+function ExpensesPage({expenses,setExpenses,jobs,setTab}) {
+  const activeJobs=(jobs||[]).filter(j=>!j.deleted);
+  const [token,setToken]=useState(()=>_gToken);
+  const [date,setDate]  =useState(todayS());
+  const [amount,setAmount]=useState('');
+  const [desc,setDesc]  =useState('');
+  const [cat,setCat]    =useState('fuel');
+  const [jobId,setJobId]=useState((activeJobs[0]&&activeJobs[0].id)||'');
+  const [file,setFile]  =useState(null);
+  const [busy,setBusy]  =useState(false);
+  const [status,setStatus]=useState('');
+  const [open,setOpen]  =useState(false);
+
+  useEffect(()=>{
+    const iv=setInterval(()=>{ if(_gToken!==token) setToken(_gToken); },1000);
+    return ()=>clearInterval(iv);
+  },[token]);
+
+  const add=async()=>{
+    if(!amount||+amount<=0) return alert('יש להזין סכום תקין');
+    if(!date) return alert('יש לבחור תאריך');
+    let fileInfo={};
+    if(file){
+      if(!token) return alert('כדי לצרף תמונה יש להתחבר ל-Google (בהגדרות). אפשר גם להוסיף הוצאה בלי תמונה.');
+      const okType=(file.type||'').startsWith('image/')||file.type==='application/pdf';
+      if(!okType) return alert('ניתן לצרף רק תמונה או PDF');
+      if(file.size>15*1024*1024) return alert('הקובץ גדול מדי (מקסימום 15MB)');
+    }
+    setBusy(true); setStatus(file?'מעלה חשבונית...':'שומר...');
+    try{
+      if(file){
+        const meta={name:'הוצאה_'+date+'_'+file.name, mimeType:file.type||'application/octet-stream'};
+        const res=await uploadFileToDrive(file,meta);
+        fileInfo={
+          driveFileId:res.id,
+          driveLink:safeUrl(res.webViewLink)||('https://drive.google.com/file/d/'+encodeURIComponent(res.id)+'/view'),
+          fileName:file.name
+        };
+      }
+      setExpenses(list=>[...list,{
+        id:genId(),date,amount:+amount,desc:desc.trim(),cat,
+        jobId:jobId||null,reimbursed:false,createdAt:new Date().toISOString(),...fileInfo
+      }]);
+      setAmount(''); setDesc(''); setFile(null); setOpen(false);
+      setStatus('נוסף ✓');
+    }catch(e){ setStatus('שגיאה: '+e.message); }
+    setBusy(false);
+  };
+
+  const del=async(x)=>{
+    if(!confirm('למחוק הוצאה זו?')) return;
+    if(x.driveFileId) await deleteDriveFile(x.driveFileId);
+    setExpenses(list=>list.filter(y=>y.id!==x.id));
+  };
+  const toggleReimbursed=id=>setExpenses(list=>list.map(x=>x.id===id?{...x,reimbursed:!x.reimbursed}:x));
+
+  const grouped=useMemo(()=>{
+    const by={};
+    (expenses||[]).forEach(x=>{ const k=x.date.slice(0,7); (by[k]=by[k]||[]).push(x); });
+    return Object.keys(by).sort().reverse().map(m=>{
+      const [y,mo]=m.split('-').map(Number);
+      const items=by[m].sort((a,b)=>a.date<b.date?1:-1);
+      return {month:m,label:MONTHS[mo-1]+' '+y,items,
+        total:items.reduce((n,x)=>n+(x.amount||0),0),
+        pending:items.filter(x=>!x.reimbursed).reduce((n,x)=>n+(x.amount||0),0)};
+    });
+  },[expenses]);
+
+  const totalPending=(expenses||[]).filter(x=>!x.reimbursed).reduce((n,x)=>n+(x.amount||0),0);
+
+  return html`<div class="space-y-4">
+    <div class="bg-gradient-to-l from-amber-500 to-orange-500 rounded-2xl p-5 text-white shadow-md">
+      <div class="text-lg font-extrabold flex items-center gap-2"><${Icon} name="wallet" size=${20}/> הוצאות להחזר</div>
+      <div class="text-xs text-amber-50 mt-1 leading-4">דלק, כלים וחלקים ששילמת מכיסך</div>
+      <div class="mt-3 bg-white/15 rounded-xl px-3 py-2">
+        <div class="text-xs text-amber-50">ממתין להחזר</div>
+        <div class="text-2xl font-extrabold">${fmt(totalPending)}</div>
+      </div>
+    </div>
+
+    ${!open
+      ? html`<button onClick=${()=>setOpen(true)}
+          class="w-full bg-blue-500 text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-blue-600 flex items-center justify-center gap-1.5">
+          <${Icon} name="plus" size=${15}/> הוסף הוצאה</button>`
+      : html`<div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm space-y-3">
+          <h3 class="text-sm font-semibold text-gray-700">הוצאה חדשה</h3>
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block text-xs text-gray-400 mb-1">תאריך קנייה</label>
+              <input type="date" value=${date} onChange=${e=>setDate(e.target.value)}
+                class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
+            </div>
+            <div>
+              <label class="block text-xs text-gray-400 mb-1">סכום (₪)</label>
+              <input type="number" step="0.01" min="0" value=${amount} onInput=${e=>setAmount(e.target.value)} placeholder="0"
+                class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-400 mb-1">סוג</label>
+            <div class="flex gap-2">
+              ${EXP_CATS.map(c=>html`<button key=${c.id} onClick=${()=>setCat(c.id)}
+                class=${'flex-1 py-2 rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-1 '+(cat===c.id?'bg-blue-500 text-white':'bg-gray-100 text-gray-600 hover:bg-gray-200')}>
+                <${Icon} name=${c.icon} size=${14}/> ${c.label}</button>`)}
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-400 mb-1">תיאור</label>
+            <input value=${desc} onInput=${e=>setDesc(e.target.value)} placeholder="למשל: תדלוק ברכב החברה"
+              class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
+          </div>
+          ${activeJobs.length>0&&html`<div>
+            <label class="block text-xs text-gray-400 mb-1">משרה</label>
+            <select value=${jobId} onChange=${e=>setJobId(e.target.value)}
+              class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
+              ${activeJobs.map(j=>html`<option key=${j.id} value=${j.id}>${j.name}</option>`)}
+            </select>
+          </div>`}
+          <div>
+            <label class="block text-xs text-gray-400 mb-1">חשבונית / תמונה (לא חובה)</label>
+            <input type="file" accept="image/*,.pdf" onChange=${e=>setFile(e.target.files[0]||null)} class="w-full text-sm text-gray-600"/>
+            ${!token&&html`<p class="text-[11px] text-amber-600 mt-1">לצירוף תמונה יש להתחבר ל-Google בהגדרות.</p>`}
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <button onClick=${add} disabled=${busy}
+              class="bg-blue-500 text-white py-2 rounded-lg text-sm font-semibold hover:bg-blue-600 disabled:opacity-50">
+              ${busy?'...':'שמור'}</button>
+            <button onClick=${()=>{setOpen(false);setStatus('');}}
+              class="bg-gray-100 text-gray-700 py-2 rounded-lg text-sm font-semibold hover:bg-gray-200">ביטול</button>
+          </div>
+          ${status&&html`<div class=${'text-xs text-center py-1.5 px-3 rounded-lg '+(status.includes('שגיאה')?'bg-red-50 text-red-600':'bg-blue-50 text-blue-700')}>${status}</div>`}
+        </div>`}
+
+    ${grouped.length===0?html`
+      <div class="text-center py-14 text-gray-400 bg-white rounded-xl border border-gray-100">
+        <div class="flex justify-center mb-3 text-gray-300"><${Icon} name="wallet" size=${40}/></div>
+        <div class="text-sm">אין הוצאות עדיין</div>
+      </div>`:
+      grouped.map(g=>html`<div key=${g.month} class="space-y-2">
+        <div class="flex items-center justify-between px-1">
+          <span class="text-xs font-semibold text-gray-400">${g.label}</span>
+          <span class="text-xs font-semibold text-gray-600">סה"כ ${fmt(g.total)}${g.pending>0&&g.pending!==g.total?' · ממתין '+fmt(g.pending):''}</span>
+        </div>
+        ${g.items.map(x=>{
+          const job=findJob(jobs,x.jobId), c=EXP_CATS.find(k=>k.id===x.cat)||EXP_CATS[2];
+          return html`<div key=${x.id} class=${'bg-white rounded-xl border p-3 shadow-sm flex items-center gap-3 '+(x.reimbursed?'border-emerald-200':'border-gray-100')}>
+            <div class=${'flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center '+(x.reimbursed?'bg-emerald-50 text-emerald-600':'bg-amber-50 text-amber-600')}>
+              <${Icon} name=${c.icon} size=${17}/>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="text-sm font-medium text-gray-800 truncate">${x.desc||c.label}</div>
+              <div class="text-[11px] text-gray-400 truncate">
+                ${new Date(x.date+'T12:00:00').toLocaleDateString('he-IL',{day:'numeric',month:'long'})}
+                ${job?' · '+job.name:''}${x.reimbursed?' · הוחזר ✓':''}
+              </div>
+            </div>
+            <div class="text-sm font-bold text-gray-800 flex-shrink-0">${fmt(x.amount)}</div>
+            ${x.driveLink&&html`<a href=${x.driveLink} target="_blank" rel="noopener noreferrer"
+              class="flex-shrink-0 p-1.5 rounded hover:bg-blue-50 text-gray-400 hover:text-blue-500" title="צפה בחשבונית"><${Icon} name="external" size=${15}/></a>`}
+            <button onClick=${()=>toggleReimbursed(x.id)}
+              class=${'flex-shrink-0 p-1.5 rounded '+(x.reimbursed?'text-emerald-600 hover:bg-emerald-50':'text-gray-400 hover:bg-emerald-50 hover:text-emerald-600')}
+              title=${x.reimbursed?'בטל סימון החזר':'סמן שהוחזר'}><${Icon} name="check" size=${15}/></button>
+            <button onClick=${()=>del(x)} class="flex-shrink-0 p-1.5 rounded text-gray-400 hover:bg-red-50 hover:text-red-500"><${Icon} name="trash" size=${15}/></button>
+          </div>`;
+        })}
+      </div>`)}
+  </div>`;
+}
+
 function PayslipsPage({payslips,setPayslips,setShifts,jobs,setTab}) {
   const activeJobs=(jobs||[]).filter(j=>!j.deleted);
   const [token, setToken] = useState(()=>_gToken);
@@ -2239,7 +2467,7 @@ function PayslipsPage({payslips,setPayslips,setShifts,jobs,setTab}) {
 }
 
 // ── SettingsPage ─────────────────────────────────────────────
-function SettingsPage({settings,setSettings,jobs,shifts,setJobs,setShifts,payslips,setPayslips}) {
+function SettingsPage({settings,setSettings,jobs,shifts,setJobs,setShifts,payslips,setPayslips,expenses,setExpenses}) {
   const [showCalc,setShowCalc]=useState(false);
   const [notifPerm,setNotifPerm]=useState(window.Notification?Notification.permission:'unsupported');
   const n=(settings&&settings.notify)||{};
@@ -2464,8 +2692,8 @@ function SettingsPage({settings,setSettings,jobs,shifts,setJobs,setShifts,paysli
       <h3 class="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-1.5"><${Icon} name="cloud" size=${15}/> גיבוי Google Drive</h3>
       <${GoogleDriveSection}
         settings=${settings} setSettings=${setSettings}
-        jobs=${jobs} shifts=${shifts} payslips=${payslips}
-        setJobs=${setJobs} setShifts=${setShifts} setPayslips=${setPayslips}/>
+        jobs=${jobs} shifts=${shifts} payslips=${payslips} expenses=${expenses}
+        setJobs=${setJobs} setShifts=${setShifts} setPayslips=${setPayslips} setExpenses=${setExpenses}/>
     </div>
     <div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
       <h3 class="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-1.5"><${Icon} name="calendar" size=${15}/> סנכרון ליומן Google</h3>
@@ -2558,6 +2786,7 @@ function App() {
   const [jobs,    setJobs]    =useLS('sw_jobs',    []);
   const [shifts,  setShifts]  =useLS('sw_shifts',  []);
   const [payslips,setPayslips]=useLS('sw_payslips',[]);
+  const [expenses,setExpenses]=useLS('sw_expenses',[]);
   const [settings,setSettings]=useLS('sw_settings',{creditPoints:2.25,darkMode:false,gClientId:'365339624558-7t7arbt13od0i1frr0i3v0ernhsq6mhv.apps.googleusercontent.com'});
   const [tab,     setTab]     =useState('dashboard');
 
@@ -2618,7 +2847,7 @@ function App() {
     document.documentElement.style.backgroundColor=darkMode?'#0f172a':'#f8fafc';
   },[darkMode]);
 
-  const TABS=[{id:'dashboard',label:'דשבורד',icon:'dashboard'},{id:'shifts',label:'משמרות',icon:'calendar'},{id:'jobs',label:'משרות',icon:'briefcase'},{id:'payslips',label:'תלושים',icon:'receipt'},{id:'settings',label:'הגדרות',icon:'settings'}];
+  const TABS=[{id:'dashboard',label:'דשבורד',icon:'dashboard'},{id:'shifts',label:'משמרות',icon:'calendar'},{id:'jobs',label:'משרות',icon:'briefcase'},{id:'payslips',label:'תלושים',icon:'receipt'},{id:'expenses',label:'הוצאות',icon:'wallet'},{id:'settings',label:'הגדרות',icon:'settings'}];
 
   return html`<div class=${'min-h-screen bg-slate-50 '+(darkMode?'dark':'')}>
     <header class="bg-white border-b border-gray-200 sticky top-0 z-40 shadow-sm">
@@ -2654,11 +2883,12 @@ function App() {
     </header>
     <main class="max-w-2xl mx-auto px-4 py-5">
       <div class="fade">
-        ${tab==='dashboard'&&html`<${DashboardPage} shifts=${shifts} setShifts=${setShifts} jobs=${jobs} settings=${settings} payslips=${payslips} setTab=${setTab}/>`}
+        ${tab==='dashboard'&&html`<${DashboardPage} shifts=${shifts} setShifts=${setShifts} jobs=${jobs} settings=${settings} payslips=${payslips} expenses=${expenses} setTab=${setTab}/>`}
         ${tab==='shifts'   &&html`<${ShiftsPage}    shifts=${shifts} setShifts=${setShifts} jobs=${jobs}/>`}
         ${tab==='jobs'     &&html`<${JobsPage}       jobs=${jobs}    setJobs=${setJobs} shifts=${shifts} setShifts=${setShifts}/>`}
         ${tab==='payslips' &&html`<${PayslipsPage}   payslips=${payslips} setPayslips=${setPayslips} setShifts=${setShifts} jobs=${jobs} setTab=${setTab}/>`}
-        ${tab==='settings' &&html`<${SettingsPage}   settings=${settings} setSettings=${setSettings} jobs=${jobs} shifts=${shifts} setJobs=${setJobs} setShifts=${setShifts} payslips=${payslips} setPayslips=${setPayslips}/>`}
+        ${tab==='expenses' &&html`<${ExpensesPage}   expenses=${expenses} setExpenses=${setExpenses} jobs=${jobs} setTab=${setTab}/>`}
+        ${tab==='settings' &&html`<${SettingsPage}   settings=${settings} setSettings=${setSettings} jobs=${jobs} shifts=${shifts} setJobs=${setJobs} setShifts=${setShifts} payslips=${payslips} setPayslips=${setPayslips} expenses=${expenses} setExpenses=${setExpenses}/>`}
       </div>
     </main>
   </div>`;
