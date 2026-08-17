@@ -46,7 +46,11 @@
     /* Prevent rubber-band overscroll + pinch-zoom stretching on mobile */
     html { overscroll-behavior:none; background-color:#f8fafc; }
     body { overscroll-behavior:none; }
-    html, body { touch-action:pan-x pan-y; overflow-x:hidden; }
+    /* overflow-x:hidden on body forces overflow-y:auto, which makes body a
+       scroll container and stops the sticky header from pinning. clip keeps
+       the horizontal guard without creating one. */
+    html { touch-action:pan-x pan-y; overflow-x:hidden; }
+    body { touch-action:pan-x pan-y; overflow-x:clip; }
     /* iOS date/time fields: normalize to match regular inputs (kills intrinsic width overflow) */
     input[type=date], input[type=time], input[type=month] {
       -webkit-appearance:none; appearance:none; min-width:0; min-height:2.4rem; text-align:center;
@@ -58,20 +62,20 @@
     .dark, .dark body { color-scheme: dark; }
     .dark .border-blue-200 { border-color:rgba(96,181,255,.4) !important; }
     .dark ::-webkit-scrollbar-thumb { background:#354354; }
-    .dark body { background-color:#151F2C !important; }
-    .dark .bg-white  { background-color:#1E2937 !important; }
-    .dark .bg-slate-50 { background-color:#151F2C !important; }
+    .dark body { background-color:#0E1621 !important; }
+    .dark .bg-white  { background-color:#16202C !important; }
+    .dark .bg-slate-50 { background-color:#0E1621 !important; }
     .dark .bg-gray-50\/40 { background-color:rgba(15,23,42,.5) !important; }
-    .dark .border-gray-100 { border-color:#293544 !important; }
+    .dark .border-gray-100 { border-color:#202B38 !important; }
     .dark .border-gray-200 { border-color:#354354 !important; }
     .dark .text-gray-800 { color:#E6EEF7 !important; }
     .dark .text-gray-700 { color:#D3DFEC !important; }
     .dark .text-gray-600 { color:#B6C6D6 !important; }
     .dark .text-gray-500 { color:#92A6BA !important; }
     .dark .text-gray-400 { color:#7A8DA3 !important; }
-    .dark .bg-gray-100  { background-color:#293544 !important; }
-    .dark .hover\:bg-gray-100:hover { background-color:#293544 !important; }
-    .dark .hover\:bg-gray-50:hover  { background-color:#1E2937 !important; }
+    .dark .bg-gray-100  { background-color:#202B38 !important; }
+    .dark .hover\:bg-gray-100:hover { background-color:#202B38 !important; }
+    .dark .hover\:bg-gray-50:hover  { background-color:#16202C !important; }
     .dark .hover\:bg-gray-200:hover { background-color:#354354 !important; }
     /* Light-tint hover states (sticky :hover on mobile taps) */
     .dark .hover\:bg-blue-50:hover     { background-color:rgba(96,181,255,.15) !important; }
@@ -81,10 +85,10 @@
     .dark .hover\:bg-red-50:hover      { background-color:rgba(239,68,68,.12) !important; }
     .dark .hover\:bg-red-100:hover     { background-color:rgba(239,68,68,.25) !important; }
     /* Miluim info box readable in dark */
-    .dark .mil-note   { color:#d7dcb8 !important; }
-    .dark .mil-strong { color:#b8c56e !important; border-color:rgba(184,197,110,.35) !important; }
+    .dark .mil-note   { color:#CFE0BC !important; }
+    .dark .mil-strong { color:#A8CE85 !important; border-color:rgba(168,206,133,.35) !important; }
     .dark input:not([type=checkbox]), .dark select, .dark textarea {
-      background-color:#293544 !important; color:#E6EEF7 !important; border-color:#354354 !important;
+      background-color:#202B38 !important; color:#E6EEF7 !important; border-color:#354354 !important;
     }
     .dark .shadow-sm   { box-shadow:0 1px 3px rgba(0,0,0,.5) !important; }
     .dark .shadow-2xl  { box-shadow:0 25px 50px rgba(0,0,0,.7) !important; }
@@ -144,14 +148,14 @@
     /* ── Shared accent (ice blue) ── */
     html { background-color:#F2F6FB; }
     body.bg-slate-50 { background-color:#F2F6FB !important; }
-    body.bg-slate-50.dark, .dark body.bg-slate-50 { background-color:#151F2C !important; }
+    body.bg-slate-50.dark, .dark body.bg-slate-50 { background-color:#0E1621 !important; }
     .bg-blue-500 { background-color:#2C87DB !important; }
     .hover\:bg-blue-600:hover { background-color:#2172C4 !important; }
     .text-blue-600 { color:#1D6FB8 !important; }
     .text-blue-700 { color:#1A5F9E !important; }
     .bg-blue-50 { background-color:#EAF3FC !important; }
     .border-blue-200 { border-color:#BBD9F5 !important; }
-    .dark html, .dark body { background-color:#151F2C !important; }
+    .dark html, .dark body { background-color:#0E1621 !important; }
     .dark .bg-blue-500 { background-color:#2E90E0 !important; color:#fff !important; }
     .dark .hover\:bg-blue-600:hover { background-color:#3D9BEA !important; }
     .dark .bg-white { box-shadow:0 1px 0 rgba(255,255,255,.03) inset, 0 6px 18px -14px rgba(0,0,0,.9) !important; }
@@ -194,6 +198,17 @@
       background:var(--h-chip-bg) !important; border:1px solid var(--h-chip-br) !important;
     }
 
+
+
+    /* The unconfirmed-arrival amber was glaring — muted so it flags without shouting */
+    .dark .text-amber-600, .dark .text-amber-700, .dark .text-amber-800,
+    .dark .text-orange-600, .dark .text-orange-700, .dark .text-amber-500 { color:#CDA96F !important; }
+    .dark .bg-amber-50, .dark .bg-amber-100, .dark .bg-amber-50\/60 { background-color:rgba(205,169,111,.10) !important; }
+    .dark .border-amber-100, .dark .border-amber-200, .dark .border-amber-300 { border-color:rgba(205,169,111,.32) !important; }
+    .text-amber-500, .text-amber-600, .text-amber-700, .text-amber-800,
+    .text-orange-600, .text-orange-700 { color:#8A6520 !important; }
+    .bg-amber-50, .bg-amber-100, .bg-amber-50\/60 { background-color:#FAF6EE !important; }
+    .border-amber-100, .border-amber-200, .border-amber-300 { border-color:#DCC9A6 !important; }
 
     /* Green sat outside the blue family — moved to teal so "paid" still reads
        as positive without fighting the accent. */
@@ -249,7 +264,7 @@
       --h-grain:.0;
     }
     .dark {
-      --h-bg:#111C2B;
+      --h-bg:#0B131D;
       --h-glow:rgba(96,181,255,.50);
       --h-amount:#8CC8FF;
       --h-amount-glow:rgba(96,181,255,.55);
@@ -309,6 +324,14 @@
     .hero-stat { color:var(--h-stat); font-weight:700; font-size:.95rem; font-variant-numeric:tabular-nums; }
     .hero-track { height:5px; border-radius:999px; background:var(--h-track); overflow:hidden; }
     .hero-fill  { height:100%; border-radius:999px; background:var(--h-fill); }
+    .hero-forecast {
+      display:flex; align-items:center; justify-content:space-between; gap:.5rem;
+      margin-bottom:.9rem; padding:.5rem .65rem; border-radius:.6rem;
+      background:var(--h-chip-bg); border:1px solid var(--h-chip-br);
+      color:var(--h-sub); font-size:.72rem;
+    }
+    .hero-forecast-val { color:var(--h-amount); font-weight:700; font-size:.9rem; font-variant-numeric:tabular-nums; }
+    .hero-forecast-sub { color:var(--h-sub); font-size:.68rem; }
     .hero-cta {
       width:100%; border:0; border-radius:.85rem; padding:.8rem 1rem;
       font-weight:700; font-size:.9rem; cursor:pointer;
@@ -344,7 +367,7 @@ const html = htm.bind(h);
 // ── Constants ────────────────────────────────────────────────
 const MONTHS = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
 const DAYS   = ['א׳','ב׳','ג׳','ד׳','ה׳','ו׳','ש׳'];
-const COLORS = ['#3B82F6','#10B981','#8B5CF6','#EF4444','#F97316','#EC4899','#14B8A6','#6366F1','#F59E0B','#84CC16','#06B6D4','#F43F5E'];
+const COLORS = ['#4A9EE0','#2FA8A0','#6E85D9','#9B7FD4','#3FB6CC','#5C8CB0','#C9789F','#D69A5A','#7FA85C','#C4685E','#4FA8C9','#8E96A8'];
 
 // ── Helpers ──────────────────────────────────────────────────
 const genId   = () => Date.now().toString(36) + Math.random().toString(36).slice(2,5);
@@ -423,7 +446,7 @@ async function deleteDriveFile(id){
 const BRACKETS  = [{l:7380,r:.10},{l:10620,r:.14},{l:17040,r:.20},{l:22440,r:.31},{l:46640,r:.35},{l:60130,r:.47},{l:1e9,r:.50}];
 const CVAL=242, NI_FL=6970, NI_CL=49030;
 // Miluim (reserve duty) daily compensation bounds — Bituach Leumi estimates, editable by the user
-const MILUIM_MIN_DAY=310, MILUIM_MAX_DAY=1650, MILUIM_COLOR='#4B5320';
+const MILUIM_MIN_DAY=310, MILUIM_MAX_DAY=1650, MILUIM_COLOR='#7FA85C';
 
 // Google OAuth Client ID (public identifier, baked in; stored overrides are ignored unless valid)
 const DEFAULT_GCID='365339624558-7t7arbt13od0i1frr0i3v0ernhsq6mhv.apps.googleusercontent.com';
@@ -629,7 +652,7 @@ function useCountUp(target, active) {
 }
 
 // ── DashboardHero ────────────────────────────────────────────
-function DashboardHero({net,gross,deductions,daysWorked,monthLabel,allPaid,todayShifts,todayArrived,onToggleArrived,onAddShift,monthProgress}) {
+function DashboardHero({net,gross,deductions,daysWorked,monthLabel,allPaid,todayShifts,todayArrived,onToggleArrived,onAddShift,monthProgress,futureCount,forecastNet,forecastHours}) {
   const animate = !_privacy;
   const shown = useCountUp(net, animate);
   const hasToday = todayShifts.length>0;
@@ -658,9 +681,18 @@ function DashboardHero({net,gross,deductions,daysWorked,monthLabel,allPaid,today
       </div>
     </div>
 
-    <div class="mt-3 mb-4">
+    <div class="mt-3 mb-3">
       <div class="hero-track"><div class="hero-fill" style=${{width:Math.round(monthProgress*100)+'%'}}></div></div>
     </div>
+
+    ${futureCount>0&&html`
+      <div class="hero-forecast">
+        <span class="flex items-center gap-1.5"><${Icon} name="trend" size=${13}/> צפי לסוף החודש</span>
+        <span class="flex items-center gap-2">
+          <span class="hero-forecast-val">${fmt(forecastNet)}</span>
+          <span class="hero-forecast-sub">${futureCount} משמרות · ${forecastHours} שע'</span>
+        </span>
+      </div>`}
 
     ${hasToday
       ? html`<button class=${'hero-cta'+(todayArrived?' done':'')} onClick=${onToggleArrived}>
@@ -748,7 +780,7 @@ function JobForm({initial, shifts, onSave, onClose}) {
       </div>
     </div>
     ${type==='miluim'&&html`
-      <div class="mil-note rounded-lg p-3 text-xs leading-5 border" style=${{backgroundColor:MILUIM_COLOR+'15',borderColor:MILUIM_COLOR+'44',color:'#3d451f'}}>
+      <div class="mil-note rounded-lg p-3 text-xs leading-5 border" style=${{backgroundColor:MILUIM_COLOR+'15',borderColor:MILUIM_COLOR+'44',color:'#4A5F33'}}>
         <div class="mil-strong font-semibold mb-1" style=${{color:MILUIM_COLOR}}>שירות מילואים — הכל אוטומטי</div>
         התגמול היומי מחושב לבד לפי כלל ביטוח לאומי: השכר ברוטו של 3 החודשים האחרונים ÷ 90,
         לא פחות מ־${fmt(MILUIM_MIN_DAY)} ולא יותר מ־${fmt(MILUIM_MAX_DAY)} ליום (משולם גם על סופ"ש). הערכה בלבד.
@@ -1033,7 +1065,7 @@ function CalendarView({year,month,shifts,jobs,onDayClick,onShiftClick,onRangeSel
             },350);
           }}>
           <div class="flex items-center justify-between mb-0.5">
-            <span class=${'text-xs font-semibold '+(isT?'text-blue-600':'text-gray-500')}>${day}</span>
+            <span class=${'text-xs font-semibold '+(isT?'text-blue-600':unconfirmed?'text-gray-700':'text-gray-500')}>${day}</span>
             ${unconfirmed&&html`<span class="text-[9px] text-amber-500 leading-none" title="לא סומן שהגעת">●</span>`}
           </div>
           ${ds2.slice(0,2).map(s=>{ const j=findJob(jobs,s.jobId); return html`
@@ -1869,6 +1901,7 @@ function DashboardPage({shifts,setShifts,jobs,settings,payslips,expenses,setTab}
       todayShifts=${todayShifts} todayArrived=${todayArrived}
       onToggleArrived=${toggleArrivedToday}
       onAddShift=${()=>setTab&&setTab('shifts')}
+      futureCount=${d.fut.length} forecastNet=${d.nF.net} forecastHours=${d.hrs}
       monthProgress=${(()=>{
         const dim=mDays(year,month);
         const isCur=year===now.getFullYear()&&month===now.getMonth();
@@ -1876,32 +1909,6 @@ function DashboardPage({shifts,setShifts,jobs,settings,payslips,expenses,setTab}
       })()}/>
 
     ${d.monthlyTotal>0&&html`<div class="text-xs text-gray-500">כולל שכר חודשי קבוע ${fmt(d.monthlyTotal)}</div>`}
-
-    ${expTotal>0&&html`
-      <button onClick=${()=>setTab&&setTab('expenses')}
-        class="w-full bg-white rounded-xl border border-gray-100 px-3 py-2 shadow-sm flex items-center gap-2 text-right hover:bg-gray-50 transition-colors">
-        <span class="text-amber-600 flex-shrink-0"><${Icon} name="wallet" size=${15}/></span>
-        <span class="text-xs text-gray-600 flex-1 min-w-0 truncate">הוצאות להחזר</span>
-        <span class="text-sm font-bold text-amber-600 flex-shrink-0">${fmt(expPending)}</span>
-        <span class="text-gray-300 flex-shrink-0"><${Icon} name="external" size=${13}/></span>
-      </button>`}
-
-    ${monthPayslips.length===0
-      ? html`<button onClick=${()=>setTab&&setTab('payslips')}
-          class="w-full bg-white rounded-xl border border-gray-100 px-3 py-2 shadow-sm flex items-center gap-2 text-right hover:bg-gray-50 transition-colors">
-          <span class="text-gray-400 flex-shrink-0"><${Icon} name="receipt" size=${15}/></span>
-          <span class="text-xs text-gray-400 flex-1 min-w-0 truncate">לא צורף תלוש לחודש זה</span>
-          <span class="text-gray-300 flex-shrink-0"><${Icon} name="external" size=${13}/></span>
-        </button>`
-      : html`<div class="bg-white rounded-xl border border-gray-100 px-3 py-2 shadow-sm space-y-1">
-          ${monthPayslips.map(p=>{const pj=p.jobId?findJob(jobs,p.jobId):null;return html`
-            <a key=${p.id} href=${safeUrl(p.driveLink)||'#'} target="_blank" rel="noopener noreferrer"
-              class="flex items-center gap-2 text-xs text-blue-700 hover:underline">
-              <${Icon} name="receipt" size=${15}/>
-              <span class="flex-1 min-w-0 truncate">${pj?'תלוש '+pj.name:'תלוש שכר לחודש זה'}</span>
-              <${Icon} name="external" size=${13} class="text-gray-300"/>
-            </a>`;})}
-        </div>`}
 
     ${shifts.length>0&&html`
       <div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm space-y-3">
@@ -1948,15 +1955,6 @@ function DashboardPage({shifts,setShifts,jobs,settings,payslips,expenses,setTab}
         </button>
       </div>`}
 
-    ${d.fut.length>0&&html`
-      <div class="bg-gradient-to-l from-violet-50 to-blue-50 border border-violet-100 rounded-xl p-4">
-        <div class="text-xs font-semibold text-violet-700 mb-2 flex items-center gap-1.5"><${Icon} name="trend" size=${14}/> תחזית (כולל ${d.fut.length} משמרות עתידיות)</div>
-        <div class="grid grid-cols-3 gap-3 text-center">
-          ${[['ברוטו צפוי',fmt(d.gF),'text-gray-700'],['נטו צפוי',fmt(d.nF.net),'text-emerald-600'],['שעות',String(d.hrs),'text-violet-600']]
-            .map(([l,v,c])=>html`<div key=${l}><div class="text-xs text-gray-500 mb-0.5">${l}</div><div class=${'text-lg font-bold '+c}>${v}</div></div>`)}
-        </div>
-      </div>`}
-
     ${d.gA>0&&html`
       <div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
         <h3 class="text-sm font-semibold text-gray-700 mb-3">ניכויים חודשיים (בפועל)</h3>
@@ -1983,6 +1981,33 @@ function DashboardPage({shifts,setShifts,jobs,settings,payslips,expenses,setTab}
           </div>`}
         ${d.nA.pension===0&&html`<div class="text-[11px] text-blue-500 bg-blue-50 rounded-lg p-2 mt-2">טרם חלה חובת ניכוי פנסיה החודש (בדרך כלל מתחיל אחרי 3 חודשי עבודה).</div>`}
       </div>`}
+
+    ${expTotal>0&&html`
+      <button onClick=${()=>setTab&&setTab('expenses')}
+        class="w-full bg-white rounded-xl border border-gray-100 px-3 py-2 shadow-sm flex items-center gap-2 text-right hover:bg-gray-50 transition-colors">
+        <span class="text-amber-600 flex-shrink-0"><${Icon} name="wallet" size=${15}/></span>
+        <span class="text-xs text-gray-600 flex-1 min-w-0 truncate">הוצאות להחזר</span>
+        <span class="text-sm font-bold text-amber-600 flex-shrink-0">${fmt(expPending)}</span>
+        <span class="text-gray-300 flex-shrink-0"><${Icon} name="external" size=${13}/></span>
+      </button>`}
+
+    ${monthPayslips.length===0
+      ? html`<button onClick=${()=>setTab&&setTab('payslips')}
+          class="w-full bg-white rounded-xl border border-gray-100 px-3 py-2 shadow-sm flex items-center gap-2 text-right hover:bg-gray-50 transition-colors">
+          <span class="text-gray-400 flex-shrink-0"><${Icon} name="receipt" size=${15}/></span>
+          <span class="text-xs text-gray-400 flex-1 min-w-0 truncate">לא צורף תלוש לחודש זה</span>
+          <span class="text-gray-300 flex-shrink-0"><${Icon} name="external" size=${13}/></span>
+        </button>`
+      : html`<div class="bg-white rounded-xl border border-gray-100 px-3 py-2 shadow-sm space-y-1">
+          ${monthPayslips.map(p=>{const pj=p.jobId?findJob(jobs,p.jobId):null;return html`
+            <a key=${p.id} href=${safeUrl(p.driveLink)||'#'} target="_blank" rel="noopener noreferrer"
+              class="flex items-center gap-2 text-xs text-blue-700 hover:underline">
+              <${Icon} name="receipt" size=${15}/>
+              <span class="flex-1 min-w-0 truncate">${pj?'תלוש '+pj.name:'תלוש שכר לחודש זה'}</span>
+              <${Icon} name="external" size=${13} class="text-gray-300"/>
+            </a>`;})}
+        </div>`}
+
 
     ${Object.keys(d.byJob).length>0&&html`
       <div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
@@ -2607,7 +2632,7 @@ function PayslipsPage({payslips,setPayslips,setShifts,jobs,setTab}) {
     });
   },[payslips]);
 
-  const COLORS=['#3B82F6','#8B5CF6','#10B981','#F59E0B','#EC4899','#14B8A6','#6366F1','#F43F5E'];
+  const COLORS=['#4A9EE0','#2FA8A0','#6E85D9','#9B7FD4','#3FB6CC','#5C8CB0','#C9789F','#D69A5A'];
 
   return html`<div class="space-y-4">
 
@@ -3076,7 +3101,7 @@ function App() {
   useEffect(()=>{
     document.body.className=darkMode?'bg-slate-50 dark min-h-screen':'bg-slate-50 min-h-screen';
     // Paint the page behind the app too, so iOS overscroll shows theme color instead of white
-    document.documentElement.style.backgroundColor=darkMode?'#151F2C':'#F2F6FB';
+    document.documentElement.style.backgroundColor=darkMode?'#0E1621':'#F2F6FB';
   },[darkMode]);
 
   const TABS=[{id:'dashboard',label:'דשבורד',icon:'dashboard'},{id:'shifts',label:'משמרות',icon:'calendar'},{id:'jobs',label:'משרות',icon:'briefcase'},{id:'payslips',label:'תלושים',icon:'receipt'},{id:'expenses',label:'הוצאות',icon:'wallet'},{id:'settings',label:'הגדרות',icon:'settings'}];
