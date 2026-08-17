@@ -1,5 +1,5 @@
 // Service Worker — offline support for מעקב משמרות
-const CACHE = 'mishmarot-v2';
+const CACHE = 'mishmarot-v1';
 
 // Everything needed to boot the app with no network
 const PRECACHE = [
@@ -9,8 +9,7 @@ const PRECACHE = [
   'https://cdn.tailwindcss.com',
   'https://unpkg.com/preact@10/dist/preact.umd.js',
   'https://unpkg.com/preact@10/hooks/dist/hooks.umd.js',
-  'https://unpkg.com/htm/dist/htm.umd.js',
-  'https://fonts.googleapis.com/css2?family=Assistant:wght@400;600;700&family=Frank+Ruhl+Libre:wght@500;700&family=IBM+Plex+Mono:wght@500;600&display=swap'
+  'https://unpkg.com/htm/dist/htm.umd.js'
 ];
 
 self.addEventListener('install', e => {
@@ -64,10 +63,8 @@ self.addEventListener('fetch', e => {
   if (req.method !== 'GET') return;
 
   const url = new URL(req.url);
-  // Fonts are static assets — cache them so the type survives offline
-  const isFont = url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com';
   // Never cache Google API/auth traffic — it must be live, and failing offline is expected
-  if (!isFont && /googleapis\.com|accounts\.google\.com|gstatic\.com/.test(url.hostname)) return;
+  if (/googleapis\.com|accounts\.google\.com|gstatic\.com/.test(url.hostname)) return;
 
   // Navigations: network-first so updates land, falling back to the cached shell offline
   if (req.mode === 'navigate') {
