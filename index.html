@@ -1348,7 +1348,7 @@ function ShiftsPage({shifts,setShifts,jobs}) {
             class=${'py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-1.5 '+(view===v?'bg-blue-500 text-white shadow-sm':'bg-gray-100 text-gray-600 hover:bg-gray-200')}>
             <${Icon} name=${ic} size=${15}/><span>${l}</span></button>`)}
       </div>
-      <div class="grid grid-cols-3 gap-2">
+      <div class="hidden sm:grid grid-cols-3 gap-2">
         <button onClick=${()=>setBulkModal({startDate:null,endDate:null})}
           class="bg-blue-500 text-white px-1 py-2 rounded-lg text-xs font-semibold hover:bg-blue-600 transition-colors flex items-center justify-center gap-1 text-center leading-tight"><${Icon} name="plus" size=${14}/><span>הוסף משמרת</span></button>
         <button onClick=${markMonthPaid}
@@ -1552,7 +1552,7 @@ function DashboardPage({shifts,setShifts,jobs,settings,payslips,expenses,setTab}
     if(ex.length){
       const dm=x=>{const p=x.date.split('-');return p[2]+'/'+p[1];};
       txt+='\n\nהוצאות להחזר:';
-      ex.forEach(x=>{ txt+='\n'+dm(x)+' - '+(x.desc||(EXP_CATS.find(c=>c.id===x.cat)||{}).label||'הוצאה')+' - '+Math.round(x.amount)+' ש"ח'; });
+      ex.forEach(x=>{ txt+='\n'+dm(x)+' - '+(x.desc||'הוצאה')+' - '+Math.round(x.amount)+' ש"ח'; });
       txt+='\nסה"כ להחזר - '+Math.round(ex.reduce((n,x)=>n+(x.amount||0),0))+' ש"ח';
     }
     return txt;
@@ -1591,7 +1591,7 @@ function DashboardPage({shifts,setShifts,jobs,settings,payslips,expenses,setTab}
       const cell=c=>{const s2=String(c);return '<td>'+escapeHtml(/^[=+\-@]/.test(s2)?"'"+s2:s2)+'</td>';};
       tbl+='<br/><table border="1"><tr><th>תאריך</th><th>תיאור</th><th>סכום (₪)</th></tr>';
       ex.forEach(x=>{
-        const label=x.desc||(EXP_CATS.find(c=>c.id===x.cat)||{}).label||'הוצאה';
+        const label=x.desc||'הוצאה';
         tbl+='<tr>'+cell(x.date)+cell(label)+cell(Math.round(x.amount))+'</tr>';
       });
       tbl+='<tr><td></td><td><b>סה"כ להחזר</b></td>'+cell(Math.round(ex.reduce((n,x)=>n+(x.amount||0),0)))+'</tr></table>';
@@ -1635,30 +1635,30 @@ function DashboardPage({shifts,setShifts,jobs,settings,payslips,expenses,setTab}
     </div>
 
     ${expTotal>0&&html`
-      <div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
-        <div class="flex items-center justify-between mb-1">
-          <h3 class="text-sm font-semibold text-gray-700 flex items-center gap-1.5"><${Icon} name="wallet" size=${15}/> הוצאות להחזר</h3>
-          <button onClick=${()=>setTab&&setTab('expenses')} class="text-xs text-blue-600 hover:underline">ניהול הוצאות</button>
-        </div>
-        <div class="flex items-baseline gap-2">
-          <span class="text-xl font-bold text-amber-600">${fmt(expPending)}</span>
-          <span class="text-xs text-gray-400">ממתין להחזר${expTotal!==expPending?' · מתוך '+fmt(expTotal)+' החודש':''}</span>
-        </div>
-        <div class="text-[11px] text-gray-400 mt-1">מוצג בנפרד — החזר הוצאות אינו חלק מהשכר ואינו חייב במס.</div>
-      </div>`}
+      <button onClick=${()=>setTab&&setTab('expenses')}
+        class="w-full bg-white rounded-xl border border-gray-100 px-3 py-2 shadow-sm flex items-center gap-2 text-right hover:bg-gray-50 transition-colors">
+        <span class="text-amber-600 flex-shrink-0"><${Icon} name="wallet" size=${15}/></span>
+        <span class="text-xs text-gray-600 flex-1 min-w-0 truncate">הוצאות להחזר</span>
+        <span class="text-sm font-bold text-amber-600 flex-shrink-0">${fmt(expPending)}</span>
+        <span class="text-gray-300 flex-shrink-0 text-xs">›</span>
+      </button>`}
 
-    <div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
-      <div class="flex items-center justify-between mb-1">
-        <h3 class="text-sm font-semibold text-gray-700 flex items-center gap-1.5"><${Icon} name="receipt" size=${15}/> תלוש שכר לחודש זה</h3>
-        <button onClick=${()=>setTab&&setTab('payslips')} class="text-xs text-blue-600 hover:underline">ניהול תלושים</button>
-      </div>
-      ${monthPayslips.length===0
-        ? html`<div class="text-xs text-gray-400">לא צורף תלוש לחודש זה — ניתן לצרף בלשונית "תלושים".</div>`
-        : monthPayslips.map(p=>{const pj=p.jobId?findJob(jobs,p.jobId):null;return html`<a key=${p.id} href=${safeUrl(p.driveLink)||'#'} target="_blank" rel="noopener noreferrer"
-            class="flex items-center gap-2 py-1.5 text-sm text-blue-700 hover:underline">
-            <${Icon} name="file" size=${16}/><span class="flex-1 min-w-0 truncate">${pj?'תלוש '+pj.name:'צפה בתלוש'}</span><${Icon} name="external" size=${14} class="text-gray-300"/>
-          </a>`;})}
-    </div>
+    ${monthPayslips.length===0
+      ? html`<button onClick=${()=>setTab&&setTab('payslips')}
+          class="w-full bg-white rounded-xl border border-gray-100 px-3 py-2 shadow-sm flex items-center gap-2 text-right hover:bg-gray-50 transition-colors">
+          <span class="text-gray-400 flex-shrink-0"><${Icon} name="receipt" size=${15}/></span>
+          <span class="text-xs text-gray-400 flex-1 min-w-0 truncate">לא צורף תלוש לחודש זה</span>
+          <span class="text-gray-300 flex-shrink-0 text-xs">›</span>
+        </button>`
+      : html`<div class="bg-white rounded-xl border border-gray-100 px-3 py-2 shadow-sm space-y-1">
+          ${monthPayslips.map(p=>{const pj=p.jobId?findJob(jobs,p.jobId):null;return html`
+            <a key=${p.id} href=${safeUrl(p.driveLink)||'#'} target="_blank" rel="noopener noreferrer"
+              class="flex items-center gap-2 text-xs text-blue-700 hover:underline">
+              <${Icon} name="receipt" size=${15}/>
+              <span class="flex-1 min-w-0 truncate">${pj?'תלוש '+pj.name:'תלוש שכר לחודש זה'}</span>
+              <${Icon} name="external" size=${13} class="text-gray-300"/>
+            </a>`;})}
+        </div>`}
 
     ${shifts.length>0&&html`
       <div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm space-y-3">
@@ -2154,15 +2154,12 @@ function GoogleCalendarSection({jobs,shifts,setShifts,settings,setSettings}) {
 
 // ── PayslipsPage ─────────────────────────────────────────────
 // ── ExpensesPage (out-of-pocket work costs awaiting reimbursement) ──
-const EXP_CATS=[{id:'fuel',label:'דלק',icon:'car'},{id:'tools',label:'כלים/חלקים',icon:'folder'},{id:'other',label:'אחר',icon:'wallet'}];
-
 function ExpensesPage({expenses,setExpenses,jobs,setTab}) {
   const activeJobs=(jobs||[]).filter(j=>!j.deleted);
   const [token,setToken]=useState(()=>_gToken);
   const [date,setDate]  =useState(todayS());
   const [amount,setAmount]=useState('');
   const [desc,setDesc]  =useState('');
-  const [cat,setCat]    =useState('fuel');
   const [jobId,setJobId]=useState((activeJobs[0]&&activeJobs[0].id)||'');
   const [file,setFile]  =useState(null);
   const [busy,setBusy]  =useState(false);
@@ -2196,7 +2193,7 @@ function ExpensesPage({expenses,setExpenses,jobs,setTab}) {
         };
       }
       setExpenses(list=>[...list,{
-        id:genId(),date,amount:+amount,desc:desc.trim(),cat,
+        id:genId(),date,amount:+amount,desc:desc.trim(),
         jobId:jobId||null,reimbursed:false,createdAt:new Date().toISOString(),...fileInfo
       }]);
       setAmount(''); setDesc(''); setFile(null); setOpen(false);
@@ -2255,14 +2252,6 @@ function ExpensesPage({expenses,setExpenses,jobs,setTab}) {
             </div>
           </div>
           <div>
-            <label class="block text-xs text-gray-400 mb-1">סוג</label>
-            <div class="flex gap-2">
-              ${EXP_CATS.map(c=>html`<button key=${c.id} onClick=${()=>setCat(c.id)}
-                class=${'flex-1 py-2 rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-1 '+(cat===c.id?'bg-blue-500 text-white':'bg-gray-100 text-gray-600 hover:bg-gray-200')}>
-                <${Icon} name=${c.icon} size=${14}/> ${c.label}</button>`)}
-            </div>
-          </div>
-          <div>
             <label class="block text-xs text-gray-400 mb-1">תיאור</label>
             <input value=${desc} onInput=${e=>setDesc(e.target.value)} placeholder="למשל: תדלוק ברכב החברה"
               class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
@@ -2300,13 +2289,13 @@ function ExpensesPage({expenses,setExpenses,jobs,setTab}) {
           <span class="text-xs font-semibold text-gray-600">סה"כ ${fmt(g.total)}${g.pending>0&&g.pending!==g.total?' · ממתין '+fmt(g.pending):''}</span>
         </div>
         ${g.items.map(x=>{
-          const job=findJob(jobs,x.jobId), c=EXP_CATS.find(k=>k.id===x.cat)||EXP_CATS[2];
+          const job=findJob(jobs,x.jobId);
           return html`<div key=${x.id} class=${'bg-white rounded-xl border p-3 shadow-sm flex items-center gap-3 '+(x.reimbursed?'border-emerald-200':'border-gray-100')}>
             <div class=${'flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center '+(x.reimbursed?'bg-emerald-50 text-emerald-600':'bg-amber-50 text-amber-600')}>
-              <${Icon} name=${c.icon} size=${17}/>
+              <${Icon} name="wallet" size=${17}/>
             </div>
             <div class="flex-1 min-w-0">
-              <div class="text-sm font-medium text-gray-800 truncate">${x.desc||c.label}</div>
+              <div class="text-sm font-medium text-gray-800 truncate">${x.desc||'הוצאה'}</div>
               <div class="text-[11px] text-gray-400 truncate">
                 ${new Date(x.date+'T12:00:00').toLocaleDateString('he-IL',{day:'numeric',month:'long'})}
                 ${job?' · '+job.name:''}${x.reimbursed?' · הוחזר ✓':''}
@@ -2872,11 +2861,12 @@ function App() {
             <img src="./icon.jpg" alt="לוגו" class="w-9 h-9 rounded-lg object-cover shadow-sm"/>
           </div>
         </div>
-        <nav class="flex -mb-px overflow-x-auto">
+        <nav class="flex -mb-px">
           ${TABS.map(t=>html`
             <button key=${t.id} onClick=${()=>setTab(t.id)}
-              class=${'flex items-center gap-1.5 px-3 py-2.5 text-xs font-semibold whitespace-nowrap border-b-2 transition-colors '+(tab===t.id?'border-blue-500 text-blue-600':'border-transparent text-gray-500 hover:text-gray-700')}>
-              <${Icon} name=${t.icon} size=${15}/><span>${t.label}</span>
+              class=${'flex-1 min-w-0 flex flex-col items-center justify-center gap-0.5 px-0.5 py-2 border-b-2 transition-colors sm:flex-row sm:gap-1.5 sm:py-2.5 '+(tab===t.id?'border-blue-500 text-blue-600':'border-transparent text-gray-500 hover:text-gray-700')}>
+              <${Icon} name=${t.icon} size=${16}/>
+              <span class="text-[10px] leading-none font-semibold truncate max-w-full sm:text-xs">${t.label}</span>
             </button>`)}
         </nav>
       </div>
