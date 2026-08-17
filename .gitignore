@@ -1,0 +1,6 @@
+# Machine-specific Claude Code settings (local paths, personal permissions)
+.claude/settings.local.json
+
+# Cloudflare Wrangler
+push-worker/node_modules/
+push-worker/.wrangler/
