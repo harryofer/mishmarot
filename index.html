@@ -1536,10 +1536,23 @@ function DashboardPage({shifts,setShifts,jobs,settings,payslips,setTab}) {
     const nameStr=names.length?names.join(', ')+' ':'';
     return 'סיכום עבודה '+nameStr+'- '+sharePeriod()+'\nימי עבודה - '+list.length;
   };
+  // Warn before sharing if some shifts in range were never confirmed as attended
+  const confirmArrival=()=>{
+    const t=todayS();
+    const n=shareList().filter(s=>s.date<=t && !s.arrived).length;
+    if(n===0) return true;
+    const line = n===1
+      ? 'יש משמרת אחת שלא סומנה לגבי הגעה.'
+      : 'יש '+n+' משמרות שלא סומנו לגבי הגעה.';
+    return confirm('שים לב!\n\n'+line+'\n\nלשתף בכל זאת?');
+  };
+
   const shareWhatsApp=()=>{
+    if(!confirmArrival()) return;
     window.open('https://wa.me/?text='+encodeURIComponent(shareText()),'_blank','noopener,noreferrer');
   };
   const exportExcel=async()=>{
+    if(!confirmArrival()) return;
     const rows=shareList();
     const head=['משרה','יום','תאריך'];
     let tbl='<table border="1"><tr>'+head.map(h=>'<th>'+h+'</th>').join('')+'</tr>';
