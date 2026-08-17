@@ -750,10 +750,13 @@ function CalendarView({year,month,shifts,jobs,onDayClick,onShiftClick,onRangeSel
         if(!day) return html`<div key=${'e'+i}/>`;
         const ds=`${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
         const ds2=byDay[day]||[], isT=ds===today, isPast=ds<today, inDrag=selSet.has(ds);
+        // A past shift you never confirmed arriving at
+        const unconfirmed = ds<=today && ds2.length>0 && ds2.some(s=>!s.arrived);
         const cls='min-h-[4rem] rounded-lg p-1 cursor-pointer border transition-colors select-none '+
           (inDrag?'cal-drag ':isT?'border-blue-400 bg-blue-50 ':
+           unconfirmed?'border-amber-300 bg-amber-50/60 ':
            'border-transparent hover:border-gray-200 hover:bg-gray-50 ')+
-          (isPast&&!isT&&!inDrag?'bg-gray-50/40':'');
+          (isPast&&!isT&&!inDrag&&!unconfirmed?'bg-gray-50/40':'');
         return html`<div key=${day} class=${cls} data-date=${ds}
           onMouseDown=${e=>{
             if(tRef.current.isTouch) return;
@@ -778,7 +781,10 @@ function CalendarView({year,month,shifts,jobs,onDayClick,onShiftClick,onRangeSel
               navigator.vibrate&&navigator.vibrate(30);
             },350);
           }}>
-          <div class=${'text-xs font-semibold mb-0.5 '+(isT?'text-blue-600':'text-gray-500')}>${day}</div>
+          <div class="flex items-center justify-between mb-0.5">
+            <span class=${'text-xs font-semibold '+(isT?'text-blue-600':'text-gray-500')}>${day}</span>
+            ${unconfirmed&&html`<span class="text-[9px] text-amber-500 leading-none" title="לא סומן שהגעת">●</span>`}
+          </div>
           ${ds2.slice(0,2).map(s=>{ const j=findJob(jobs,s.jobId); return html`
             <div key=${s.id} data-shift="1" onClick=${e=>{e.stopPropagation();if(tRef.current.dragged)return;onShiftClick(s);}}
               class="text-[10px] px-1 py-0.5 rounded text-white break-words leading-tight mb-0.5 hover:opacity-80"
@@ -1204,6 +1210,91 @@ function DayModal({date,shifts,jobs,onEditShift,onDeleteShift,onAddShift,onToggl
   </div>`;
 }
 
+// ── UnconfirmedPanel (past shifts never marked as attended) ──
+function UnconfirmedPanel({shifts,jobs,onMarkArrived,onOpenDay}) {
+  const [open,setOpen]=useState(false);
+  const [sel,setSel]=useState(()=>new Set());
+  const [scope,setScope]=useState('all'); // 'all' | 'month'
+  const today=todayS();
+  const nowM=new Date(), curKey=nowM.getFullYear()+'-'+String(nowM.getMonth()+1).padStart(2,'0');
+
+  const pending=useMemo(()=>{
+    let list=(shifts||[]).filter(s=>s.date<=today && !s.arrived);
+    if(scope==='month') list=list.filter(s=>s.date.slice(0,7)===curKey);
+    return list.sort((a,b)=>a.date<b.date?1:-1);
+  },[shifts,today,scope,curKey]);
+
+  // Drop selections that are no longer pending (e.g. after marking)
+  useEffect(()=>{
+    const ids=new Set(pending.map(s=>s.id));
+    setSel(prev=>{
+      const next=new Set([...prev].filter(id=>ids.has(id)));
+      return next.size===prev.size?prev:next;
+    });
+  },[pending]);
+
+  if(pending.length===0) return null;
+
+  const allSelected=sel.size===pending.length;
+  const toggle=id=>setSel(p=>{const n=new Set(p); n.has(id)?n.delete(id):n.add(id); return n;});
+  const applySel=()=>{ if(sel.size){ onMarkArrived(new Set(sel),true); setSel(new Set()); } };
+  const applyAll=()=>{
+    if(!confirm('לסמן שהגעת לכל '+pending.length+' המשמרות?')) return;
+    onMarkArrived(new Set(pending.map(s=>s.id)),true);
+    setSel(new Set());
+  };
+
+  return html`<div class="bg-amber-50 border border-amber-200 rounded-xl overflow-hidden">
+    <button onClick=${()=>setOpen(o=>!o)} class="w-full flex items-center justify-between p-3 text-right">
+      <div class="flex items-center gap-2">
+        <span class="text-amber-500 text-xs">●</span>
+        <span class="text-sm font-semibold text-amber-800">${pending.length} משמרות ללא אישור הגעה</span>
+      </div>
+      <span class="text-xs text-amber-600">${open?'▲':'▼'}</span>
+    </button>
+
+    ${open&&html`<div class="px-3 pb-3 space-y-2">
+      <div class="flex gap-1.5">
+        ${[['all','הכל'],['month','החודש']].map(([v,l])=>html`
+          <button key=${v} onClick=${()=>setScope(v)}
+            class=${'px-2.5 py-1 rounded-full text-xs font-medium transition-colors '+(scope===v?'bg-amber-500 text-white':'bg-white text-amber-700 border border-amber-200')}>
+            ${l}</button>`)}
+        <button onClick=${()=>setSel(allSelected?new Set():new Set(pending.map(s=>s.id)))}
+          class="mr-auto px-2.5 py-1 rounded-full text-xs font-medium bg-white text-amber-700 border border-amber-200">
+          ${allSelected?'בטל בחירה':'בחר הכל'}</button>
+      </div>
+
+      <div class="space-y-1.5 max-h-64 overflow-y-auto">
+        ${pending.map(s=>{
+          const job=findJob(jobs,s.jobId), on=sel.has(s.id);
+          return html`<div key=${s.id}
+            class=${'flex items-center gap-2 rounded-lg p-2 border transition-colors '+(on?'bg-amber-100 border-amber-300':'bg-white border-amber-100')}>
+            <input type="checkbox" checked=${on} onChange=${()=>toggle(s.id)} class="w-4 h-4 rounded flex-shrink-0"/>
+            <div class="w-1 h-7 rounded-full flex-shrink-0" style=${{backgroundColor:(job&&job.color)||'#9CA3AF'}}/>
+            <div class="flex-1 min-w-0 cursor-pointer" onClick=${()=>onOpenDay&&onOpenDay(s.date)}>
+              <div class="text-xs font-medium text-gray-800 truncate">${(job&&job.name)||'לא ידוע'}</div>
+              <div class="text-[11px] text-gray-400">
+                ${new Date(s.date+'T12:00:00').toLocaleDateString('he-IL',{weekday:'short',day:'numeric',month:'long'})}
+              </div>
+            </div>
+            <button onClick=${()=>onMarkArrived(new Set([s.id]),true)}
+              class="flex-shrink-0 text-[11px] px-2 py-1 rounded-lg bg-blue-500 text-white font-medium hover:bg-blue-600">הגעתי</button>
+          </div>`;
+        })}
+      </div>
+
+      <div class="grid grid-cols-2 gap-2 pt-1">
+        <button onClick=${applySel} disabled=${sel.size===0}
+          class="bg-blue-500 text-white py-2 rounded-lg text-xs font-semibold hover:bg-blue-600 disabled:opacity-40">
+          סמן נבחרות (${sel.size})</button>
+        <button onClick=${applyAll}
+          class="bg-white text-amber-700 border border-amber-300 py-2 rounded-lg text-xs font-semibold hover:bg-amber-100">
+          סמן הכל (${pending.length})</button>
+      </div>
+    </div>`}
+  </div>`;
+}
+
 // ── ShiftsPage ───────────────────────────────────────────────
 function ShiftsPage({shifts,setShifts,jobs}) {
   const now=new Date();
@@ -1268,6 +1359,10 @@ function ShiftsPage({shifts,setShifts,jobs}) {
     </div>
     <${MonthStrip} year=${year} month=${month} onChange=${(y,m)=>{setYear(y);setMonth(m);}}/>
 
+    <${UnconfirmedPanel} shifts=${shifts} jobs=${jobs}
+      onMarkArrived=${markArrivedRange}
+      onOpenDay=${ds=>setDayModal(ds)}/>
+
     ${view==='calendar'?html`
       <div class="bg-white rounded-xl border border-gray-100 p-3 shadow-sm">
         <${CalendarView} year=${year} month=${month} shifts=${ms} jobs=${jobs}
@@ -1275,7 +1370,10 @@ function ShiftsPage({shifts,setShifts,jobs}) {
           onShiftClick=${s=>setDayModal(s.date)}
           onRangeSelect=${(s,e)=>setBulkModal({startDate:s,endDate:e})}/>
       </div>
-      <div class="text-xs text-gray-400 text-center mt-1">מחשב: גרור בלוח · טלפון: לחיצה ארוכה + גרירה · או כפתור "+ טווח"</div>`:html`
+      <div class="text-xs text-gray-400 text-center mt-1 flex items-center justify-center gap-1.5 flex-wrap">
+        <span class="text-amber-500">●</span><span>יום מסומן בכתום = לא אושרה הגעה</span>
+      </div>
+      <div class="text-xs text-gray-400 text-center">מחשב: גרור בלוח · טלפון: לחיצה ארוכה + גרירה</div>`:html`
       <div class="space-y-2">
         ${ms.length===0?html`
           <div class="text-center py-14 text-gray-400 bg-white rounded-xl border border-gray-100">
@@ -1297,6 +1395,7 @@ function ShiftsPage({shifts,setShifts,jobs}) {
                     ${s.isPaid&&html`<span class="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full">שולם ✓</span>`}
                     ${!s.isPaid&&!fut&&html`<span class="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">ממתין</span>`}
                     ${s.arrived&&html`<span class="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full">הגעת ✓</span>`}
+                    ${!s.arrived&&!fut&&html`<span class="text-[10px] bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded-full">● ללא אישור הגעה</span>`}
                   </div>
                   <div class="text-xs text-gray-400">
                     ${new Date(s.date+'T12:00:00').toLocaleDateString('he-IL',{weekday:'short',day:'numeric',month:'long'})}
