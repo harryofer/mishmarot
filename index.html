@@ -57,22 +57,22 @@
     /* Native controls (checkboxes, date/time pickers, scrollbars) follow the theme */
     .dark, .dark body { color-scheme: dark; }
     .dark .border-blue-200 { border-color:rgba(96,181,255,.4) !important; }
-    .dark ::-webkit-scrollbar-thumb { background:#2A3B4F; }
-    .dark body { background-color:#0A121C !important; }
-    .dark .bg-white  { background-color:#111C28 !important; }
-    .dark .bg-slate-50 { background-color:#0A121C !important; }
+    .dark ::-webkit-scrollbar-thumb { background:#354354; }
+    .dark body { background-color:#151F2C !important; }
+    .dark .bg-white  { background-color:#1E2937 !important; }
+    .dark .bg-slate-50 { background-color:#151F2C !important; }
     .dark .bg-gray-50\/40 { background-color:rgba(15,23,42,.5) !important; }
-    .dark .border-gray-100 { border-color:#1B2A3A !important; }
-    .dark .border-gray-200 { border-color:#2A3B4F !important; }
+    .dark .border-gray-100 { border-color:#293544 !important; }
+    .dark .border-gray-200 { border-color:#354354 !important; }
     .dark .text-gray-800 { color:#E6EEF7 !important; }
     .dark .text-gray-700 { color:#D3DFEC !important; }
     .dark .text-gray-600 { color:#B6C6D6 !important; }
     .dark .text-gray-500 { color:#92A6BA !important; }
     .dark .text-gray-400 { color:#7A8DA3 !important; }
-    .dark .bg-gray-100  { background-color:#1B2A3A !important; }
-    .dark .hover\:bg-gray-100:hover { background-color:#1B2A3A !important; }
-    .dark .hover\:bg-gray-50:hover  { background-color:#111C28 !important; }
-    .dark .hover\:bg-gray-200:hover { background-color:#2A3B4F !important; }
+    .dark .bg-gray-100  { background-color:#293544 !important; }
+    .dark .hover\:bg-gray-100:hover { background-color:#293544 !important; }
+    .dark .hover\:bg-gray-50:hover  { background-color:#1E2937 !important; }
+    .dark .hover\:bg-gray-200:hover { background-color:#354354 !important; }
     /* Light-tint hover states (sticky :hover on mobile taps) */
     .dark .hover\:bg-blue-50:hover     { background-color:rgba(96,181,255,.15) !important; }
     .dark .hover\:bg-blue-100:hover    { background-color:rgba(96,181,255,.25) !important; }
@@ -84,7 +84,7 @@
     .dark .mil-note   { color:#d7dcb8 !important; }
     .dark .mil-strong { color:#b8c56e !important; border-color:rgba(184,197,110,.35) !important; }
     .dark input:not([type=checkbox]), .dark select, .dark textarea {
-      background-color:#1B2A3A !important; color:#E6EEF7 !important; border-color:#2A3B4F !important;
+      background-color:#293544 !important; color:#E6EEF7 !important; border-color:#354354 !important;
     }
     .dark .shadow-sm   { box-shadow:0 1px 3px rgba(0,0,0,.5) !important; }
     .dark .shadow-2xl  { box-shadow:0 25px 50px rgba(0,0,0,.7) !important; }
@@ -136,7 +136,7 @@
     .dark .hover\:bg-emerald-100:hover{ background-color:rgba(16,185,129,.25) !important; }
     /* Input placeholder */
     .dark ::placeholder { color:#7A8DA3 !important; }
-    .dark ::-webkit-scrollbar-thumb { background:#2A3B4F; }
+    .dark ::-webkit-scrollbar-thumb { background:#354354; }
     /* Toggle switch animation */
     .toggle-thumb { transition: transform .2s; }
 
@@ -144,13 +144,14 @@
     /* ── Shared accent (ice blue) ── */
     html { background-color:#F2F6FB; }
     body.bg-slate-50 { background-color:#F2F6FB !important; }
+    body.bg-slate-50.dark, .dark body.bg-slate-50 { background-color:#151F2C !important; }
     .bg-blue-500 { background-color:#2C87DB !important; }
     .hover\:bg-blue-600:hover { background-color:#2172C4 !important; }
     .text-blue-600 { color:#1D6FB8 !important; }
     .text-blue-700 { color:#1A5F9E !important; }
     .bg-blue-50 { background-color:#EAF3FC !important; }
     .border-blue-200 { border-color:#BBD9F5 !important; }
-    .dark html, .dark body { background-color:#0A121C !important; }
+    .dark html, .dark body { background-color:#151F2C !important; }
     .dark .bg-blue-500 { background-color:#2E90E0 !important; color:#fff !important; }
     .dark .hover\:bg-blue-600:hover { background-color:#3D9BEA !important; }
     .dark .bg-white { box-shadow:0 1px 0 rgba(255,255,255,.03) inset, 0 6px 18px -14px rgba(0,0,0,.9) !important; }
@@ -180,6 +181,37 @@
     .text-red-500, .text-red-600 { color:#B23F3F !important; }
     .text-gray-400 { color:#646E7B !important; }
 
+
+    /* Section banners on the other screens reuse the hero's material so the
+       whole app reads as one surface family. */
+    .hero-band { padding:1.15rem 1.1rem; }
+    .hero-band, .hero-band * { color:var(--h-stat); }
+    .hero-band .text-xs, .hero-band .text-sm { color:var(--h-sub) !important; }
+    .dark .hero-band .text-xs { color:#A8BACC !important; }
+    .hero-band .text-lg, .hero-band .font-extrabold { color:var(--h-stat) !important; }
+    .hero-band .text-2xl, .hero-band .text-3xl { color:var(--h-amount) !important; }
+    .hero-band .bg-white\/15, .hero-band .bg-white\/20 {
+      background:var(--h-chip-bg) !important; border:1px solid var(--h-chip-br) !important;
+    }
+
+
+    /* Green sat outside the blue family — moved to teal so "paid" still reads
+       as positive without fighting the accent. */
+    .text-emerald-600, .text-emerald-700 { color:#0E7C7C !important; }
+    .bg-emerald-50, .bg-emerald-100 { background-color:#E4F4F4 !important; }
+    .border-emerald-100, .border-emerald-200, .border-emerald-300 { border-color:#9FD5D5 !important; }
+    .bg-emerald-500 { background-color:#0E7C7C !important; }
+    .hover\:bg-emerald-600:hover { background-color:#0B6666 !important; }
+    .hover\:bg-emerald-50:hover, .hover\:bg-emerald-100:hover { background-color:#E4F4F4 !important; }
+    .dark .text-emerald-600, .dark .text-emerald-700 { color:#5FD8D8 !important; }
+    .dark .bg-emerald-50, .dark .bg-emerald-100 { background-color:rgba(95,216,216,.13) !important; }
+    .dark .border-emerald-100, .dark .border-emerald-200, .dark .border-emerald-300 { border-color:rgba(95,216,216,.30) !important; }
+    .dark .bg-emerald-500 { background-color:#12807F !important; }
+    .dark .hover\:bg-emerald-600:hover { background-color:#169796 !important; }
+    .dark .hover\:bg-emerald-50:hover, .dark .hover\:bg-emerald-100:hover { background-color:rgba(95,216,216,.16) !important; }
+    .hero-chip.paid { background:rgba(14,124,124,.14); border-color:rgba(14,124,124,.30); color:#0B6262; }
+    .dark .hero-chip.paid { background:rgba(95,216,216,.14); border-color:rgba(95,216,216,.30); color:#8FE6E6; }
+
     /* Signal colours brightened for the darker midnight ground */
     .dark .text-amber-600, .dark .text-amber-700, .dark .text-amber-800,
     .dark .text-orange-600, .dark .text-orange-700, .dark .text-amber-500 { color:#F0C674 !important; }
@@ -197,30 +229,30 @@
        Ice-blue on midnight. Tokens flip with the theme so the slab
        belongs to the rest of the system in both. */
     :root {
-      --h-bg:linear-gradient(160deg,#FFFFFF,#EEF5FD);
-      --h-glow:rgba(44,135,219,.16);
+      --h-bg:linear-gradient(158deg,#F7FBFF 0%,#EDF5FD 58%,#E4F0FB 100%);
+      --h-glow:rgba(41,128,209,.20);
       --h-amount:#1D6FB8;
-      --h-amount-glow:rgba(44,135,219,.16);
+      --h-amount-glow:rgba(31,108,184,.30);
       --h-label:#5D7189;
       --h-sub:#6B8199;
       --h-stat:#12212F;
-      --h-chip-bg:rgba(29,111,184,.08);
-      --h-chip-br:rgba(29,111,184,.18);
+      --h-chip-bg:rgba(255,255,255,.55);
+      --h-chip-br:rgba(31,108,184,.22);
       --h-chip-tx:#245C8C;
-      --h-track:rgba(18,33,47,.10);
+      --h-track:rgba(23,74,125,.12);
       --h-fill:linear-gradient(90deg,#2C87DB,#7CC0F5);
       --h-cta:linear-gradient(180deg,#3D9BEA,#2172C4);
       --h-cta-tx:#FFFFFF;
       --h-rule:rgba(18,33,47,.10);
-      --h-border:1px solid #DCE7F3;
-      --h-shadow:0 10px 26px -18px rgba(20,50,80,.45);
+      --h-border:1px solid #DAE8F6;
+      --h-shadow:0 10px 26px -18px rgba(23,74,125,.28);
       --h-grain:.0;
     }
     .dark {
-      --h-bg:#0B1420;
-      --h-glow:rgba(96,181,255,.28);
+      --h-bg:#111C2B;
+      --h-glow:rgba(96,181,255,.50);
       --h-amount:#8CC8FF;
-      --h-amount-glow:rgba(96,181,255,.38);
+      --h-amount-glow:rgba(96,181,255,.55);
       --h-label:#8FA3B8;
       --h-sub:#7A8DA3;
       --h-stat:#E3EDF7;
@@ -243,9 +275,11 @@
       box-shadow:var(--h-shadow);
     }
     .hero::before {
-      content:''; position:absolute; inset:-40% 20% auto -20%; height:200%;
-      background:radial-gradient(60% 45% at 30% 25%, var(--h-glow), transparent 70%);
-      pointer-events:none;
+      content:''; position:absolute; inset:-45% 10% auto -25%; height:210%;
+      background:
+        radial-gradient(38% 30% at 28% 22%, var(--h-glow), transparent 72%),
+        radial-gradient(70% 55% at 34% 30%, var(--h-glow), transparent 78%);
+      filter:saturate(1.15); pointer-events:none;
     }
     .hero::after {
       content:''; position:absolute; inset:0; pointer-events:none; opacity:var(--h-grain);
@@ -2433,7 +2467,7 @@ function ExpensesPage({expenses,setExpenses,jobs,setTab}) {
   const totalPending=(expenses||[]).filter(x=>!x.reimbursed).reduce((n,x)=>n+(x.amount||0),0);
 
   return html`<div class="space-y-4">
-    <div class="bg-gradient-to-l from-amber-500 to-orange-500 rounded-2xl p-5 text-white shadow-md">
+    <div class="hero hero-band">
       <div class="text-lg font-extrabold flex items-center gap-2"><${Icon} name="wallet" size=${20}/> הוצאות להחזר</div>
       <div class="text-xs text-amber-50 mt-1 leading-4">דלק, כלים וחלקים ששילמת מכיסך</div>
       <div class="mt-3 bg-white/15 rounded-xl px-3 py-2">
@@ -2578,7 +2612,7 @@ function PayslipsPage({payslips,setPayslips,setShifts,jobs,setTab}) {
   return html`<div class="space-y-4">
 
     <!-- Hero header -->
-    <div class="bg-gradient-to-l from-blue-600 to-indigo-600 rounded-2xl p-5 text-white shadow-md">
+    <div class="hero hero-band">
       <div class="flex items-center justify-between">
         <div class="min-w-0">
           <div class="text-lg font-extrabold flex items-center gap-2"><${Icon} name="receipt" size=${20}/> תלושי שכר</div>
@@ -2626,7 +2660,7 @@ function PayslipsPage({payslips,setPayslips,setShifts,jobs,setTab}) {
           <input type="file" accept="image/*,.pdf" onChange=${e=>setFile(e.target.files[0]||null)} class="hidden"/>
         </label>
         <button onClick=${upload} disabled=${busy||!file}
-          class="w-full bg-gradient-to-l from-blue-600 to-indigo-600 text-white py-3 rounded-xl text-sm font-bold hover:opacity-90 disabled:opacity-40 transition-opacity shadow-sm">
+          class="hero-cta w-full disabled:opacity-40">
           ${busy?'מעלה...':html`<${Icon} name="upload" size=${14}/> העלה תלוש`}</button>
         ${status&&html`<div class=${'text-xs text-center py-2 px-3 rounded-xl '+(status.includes('שגיאה')?'bg-red-50 text-red-600':'bg-emerald-50 text-emerald-700')}>${status}</div>`}
       </div>`}
@@ -3042,7 +3076,7 @@ function App() {
   useEffect(()=>{
     document.body.className=darkMode?'bg-slate-50 dark min-h-screen':'bg-slate-50 min-h-screen';
     // Paint the page behind the app too, so iOS overscroll shows theme color instead of white
-    document.documentElement.style.backgroundColor=darkMode?'#0f172a':'#f8fafc';
+    document.documentElement.style.backgroundColor=darkMode?'#151F2C':'#F2F6FB';
   },[darkMode]);
 
   const TABS=[{id:'dashboard',label:'דשבורד',icon:'dashboard'},{id:'shifts',label:'משמרות',icon:'calendar'},{id:'jobs',label:'משרות',icon:'briefcase'},{id:'payslips',label:'תלושים',icon:'receipt'},{id:'expenses',label:'הוצאות',icon:'wallet'},{id:'settings',label:'הגדרות',icon:'settings'}];
