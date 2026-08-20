@@ -385,11 +385,12 @@ const html = htm.bind(h);
 // ── Constants ────────────────────────────────────────────────
 const MONTHS = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
 const DAYS   = ['א׳','ב׳','ג׳','ד׳','ה׳','ו׳','ש׳'];
-// Two rows: saturated first, then pastels of the same hues so a job can be
-// soft without leaving the palette.
+// Soft but saturated — every hue is distinct at swatch size, so no two jobs
+// read as the same colour. Greys and near-duplicate blues were dropped.
 const COLORS = [
-  '#4A9EE0','#2FA8A0','#6E85D9','#9B7FD4','#3FB6CC','#5C8CB0','#C9789F','#D69A5A','#7FA85C','#C4685E','#4FA8C9','#8E96A8',
-  '#A8D5F2','#A7DED4','#C3C2EE','#D8C4EC','#AEDCE6','#C2D4E8','#EFC3D4','#F2D3AE','#C9DDB4','#EFC4BC','#B9E0E6','#CBD2DC'
+  '#4A9EE0','#2FA8A0','#F2B441','#9B8CEA','#E0568C','#46C08A','#F0803C','#3FB6CC',
+  '#7FC4F0','#6FD6C4','#FFD37A','#C3B5F5','#F58BB0','#86D9A8','#FFAE7A','#5FD0E8',
+  '#7D9BE8','#B565C9','#C9789F','#D69A5A','#7FA85C','#C4685E','#43A86B','#E8654F'
 ];
 
 // ── Helpers ──────────────────────────────────────────────────
@@ -1909,8 +1910,44 @@ function DashboardPage({shifts,setShifts,jobs,settings,payslips,expenses,setTab}
     return confirm('שים לב!\n\n'+line+'\n\nלשתף בכל זאת?');
   };
 
-  const shareWhatsApp=()=>{
+  // ── Optional receipt attachments ──
+  const [attachRcpt,setAttachRcpt]=useState(false);
+  const [rcptPick,setRcptPick]=useState(()=>new Set());
+  const [rcptBusy,setRcptBusy]=useState('');
+  const receipts=shareExpenses().filter(x=>x.driveFileId);
+  // Default to everything selected the first time attachments are switched on
+  useEffect(()=>{
+    if(attachRcpt) setRcptPick(new Set(receipts.map(x=>x.id)));
+    else setRcptPick(new Set());
+  },[attachRcpt,shareScope,shareJob]);
+  const toggleRcpt=id=>setRcptPick(p=>{const n=new Set(p); n.has(id)?n.delete(id):n.add(id); return n;});
+
+  const shareWhatsApp=async()=>{
     if(!confirmArrival()) return;
+    const picked=receipts.filter(x=>rcptPick.has(x.id));
+
+    if(attachRcpt && picked.length){
+      if(!_gToken){ alert('כדי לצרף חשבוניות יש להתחבר ל-Google.'); return; }
+      setRcptBusy('מוריד חשבוניות...');
+      try{
+        const files=[];
+        for(const x of picked){
+          const r=await fetch('https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(x.driveFileId)+'?alt=media',
+            {headers:{Authorization:'Bearer '+_gToken}});
+          if(!r.ok) throw new Error('הורדה נכשלה');
+          const b=await r.blob();
+          files.push(new File([b], x.fileName||('חשבונית_'+x.date+'.jpg'), {type:b.type||'image/jpeg'}));
+        }
+        setRcptBusy('');
+        if(navigator.canShare&&navigator.canShare({files})){
+          try{ await navigator.share({files,text:shareText()}); return; }
+          catch(e){ if(e.name==='AbortError') return; }
+        }
+        // No file-share support (usually desktop) — send the text and hand over the files
+        alert('המכשיר לא תומך בשליחת קבצים ישירות. הטקסט ייפתח בוואטסאפ והחשבוניות יורדו למכשיר.');
+        files.forEach(f=>{const a=document.createElement('a');a.href=URL.createObjectURL(f);a.download=f.name;a.click();});
+      }catch(e){ setRcptBusy(''); alert('שגיאה בהורדת החשבוניות: '+e.message); return; }
+    }
     window.open('https://wa.me/?text='+encodeURIComponent(shareText()),'_blank','noopener,noreferrer');
   };
   const exportExcel=async()=>{
@@ -2005,6 +2042,24 @@ function DashboardPage({shifts,setShifts,jobs,settings,payslips,expenses,setTab}
             </div>`}
           </div>`;
         })()}
+        ${receipts.length>0&&html`
+          <div class="rounded-lg border border-gray-100 p-2.5 space-y-2">
+            <label class="flex items-center justify-between cursor-pointer select-none">
+              <span class="text-xs text-gray-700">צרף גם צילומי חשבוניות (${receipts.length})</span>
+              <input type="checkbox" checked=${attachRcpt} onChange=${e=>setAttachRcpt(e.target.checked)} class="w-4 h-4 rounded"/>
+            </label>
+            ${attachRcpt&&html`
+              <div class="space-y-1 max-h-40 overflow-y-auto pr-1">
+                ${receipts.map(x=>html`
+                  <label key=${x.id} class="flex items-center gap-2 cursor-pointer select-none text-[11px]">
+                    <input type="checkbox" checked=${rcptPick.has(x.id)} onChange=${()=>toggleRcpt(x.id)} class="w-3.5 h-3.5 rounded flex-shrink-0"/>
+                    <span class="flex-1 min-w-0 truncate text-gray-600">${x.desc||'הוצאה'}</span>
+                    <span class="text-gray-400 flex-shrink-0">${fmt(x.amount)}</span>
+                  </label>`)}
+              </div>
+              <div class="text-[11px] text-gray-400">${rcptPick.size} מתוך ${receipts.length} ייצורפו</div>`}
+          </div>`}
+        ${rcptBusy&&html`<div class="text-xs text-center py-1.5 rounded-lg bg-blue-50 text-blue-700">${rcptBusy}</div>`}
         <button onClick=${shareWhatsApp} class="w-full text-sm bg-emerald-50 text-emerald-700 py-2.5 rounded-lg hover:bg-emerald-100 font-medium flex items-center justify-center gap-2">
           <${Icon} name="chat" size=${15}/> שתף בוואטסאפ
         </button>
@@ -2491,18 +2546,29 @@ function ExpensesPage({expenses,setExpenses,jobs,setTab,settings}) {
   const [busy,setBusy]  =useState(false);
   const [status,setStatus]=useState('');
   const [open,setOpen]  =useState(false);
+  const [editId,setEditId]=useState(null);   // null = adding, otherwise editing that expense
 
   useEffect(()=>{
     const iv=setInterval(()=>{ if(_gToken!==token) setToken(_gToken); },1000);
     return ()=>clearInterval(iv);
   },[token]);
 
+  const resetForm=()=>{
+    setEditId(null); setDate(todayS()); setAmount(''); setDesc('');
+    setJobId((activeJobs[0]&&activeJobs[0].id)||''); setFile(null); setStatus('');
+  };
+  const startEdit=x=>{
+    setEditId(x.id); setDate(x.date); setAmount(String(x.amount));
+    setDesc(x.desc||''); setJobId(x.jobId||''); setFile(null); setStatus('');
+    setOpen(true);
+  };
+
   const add=async()=>{
     if(!amount||+amount<=0) return alert('יש להזין סכום תקין');
     if(!date) return alert('יש לבחור תאריך');
     let fileInfo={};
     if(file){
-      if(!token) return alert('כדי לצרף תמונה יש להתחבר ל-Google (בהגדרות). אפשר גם להוסיף הוצאה בלי תמונה.');
+      if(!token) return alert('כדי לצרף תמונה יש להתחבר ל-Google. אפשר גם לשמור בלי תמונה.');
       const okType=(file.type||'').startsWith('image/')||file.type==='application/pdf';
       if(!okType) return alert('ניתן לצרף רק תמונה או PDF');
       if(file.size>15*1024*1024) return alert('הקובץ גדול מדי (מקסימום 15MB)');
@@ -2518,12 +2584,22 @@ function ExpensesPage({expenses,setExpenses,jobs,setTab,settings}) {
           fileName:file.name
         };
       }
-      setExpenses(list=>[...list,{
-        id:genId(),date,amount:+amount,desc:desc.trim(),
-        jobId:jobId||null,reimbursed:false,createdAt:new Date().toISOString(),...fileInfo
-      }]);
-      setAmount(''); setDesc(''); setFile(null); setOpen(false);
-      setStatus('נוסף ✓');
+      if(editId){
+        // Replacing the receipt removes the old file so Drive does not collect orphans
+        const prev=(expenses||[]).find(x=>x.id===editId);
+        if(file&&prev&&prev.driveFileId) await deleteDriveFile(prev.driveFileId);
+        setExpenses(list=>list.map(x=>x.id===editId
+          ? {...x,date,amount:+amount,desc:desc.trim(),jobId:jobId||null,...fileInfo}
+          : x));
+        setStatus('עודכן ✓');
+      } else {
+        setExpenses(list=>[...list,{
+          id:genId(),date,amount:+amount,desc:desc.trim(),
+          jobId:jobId||null,reimbursed:false,createdAt:new Date().toISOString(),...fileInfo
+        }]);
+        setStatus('נוסף ✓');
+      }
+      resetForm(); setOpen(false);
     }catch(e){ setStatus('שגיאה: '+e.message); }
     setBusy(false);
   };
@@ -2560,11 +2636,11 @@ function ExpensesPage({expenses,setExpenses,jobs,setTab,settings}) {
     </div>
 
     ${!open
-      ? html`<button onClick=${()=>setOpen(true)}
+      ? html`<button onClick=${()=>{resetForm();setOpen(true);}}
           class="w-full bg-blue-500 text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-blue-600 flex items-center justify-center gap-1.5">
           <${Icon} name="plus" size=${15}/> הוסף הוצאה</button>`
       : html`<div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm space-y-3">
-          <h3 class="text-sm font-semibold text-gray-700">הוצאה חדשה</h3>
+          <h3 class="text-sm font-semibold text-gray-700">${editId?'עריכת הוצאה':'הוצאה חדשה'}</h3>
           <div class="grid grid-cols-2 gap-2">
             <div>
               <label class="block text-xs text-gray-400 mb-1">תאריך קנייה</label>
@@ -2590,7 +2666,15 @@ function ExpensesPage({expenses,setExpenses,jobs,setTab,settings}) {
             </select>
           </div>`}
           <div>
-            <label class="block text-xs text-gray-400 mb-1">חשבונית / תמונה (לא חובה)</label>
+            <label class="block text-xs text-gray-400 mb-1">
+              ${editId&&(expenses||[]).find(x=>x.id===editId&&x.driveLink)?'החלפת החשבונית (לא חובה)':'חשבונית / תמונה (לא חובה)'}
+            </label>
+            ${editId&&(()=>{const cur=(expenses||[]).find(x=>x.id===editId);
+              return cur&&cur.driveLink?html`
+                <a href=${safeUrl(cur.driveLink)||'#'} target="_blank" rel="noopener noreferrer"
+                  class="flex items-center gap-1.5 text-[11px] text-blue-700 hover:underline mb-1.5">
+                  <${Icon} name="receipt" size=${13}/> חשבונית קיימת — בחירת קובץ תחליף אותה
+                </a>`:null;})()}
             <input type="file" accept="image/*,.pdf" onChange=${e=>setFile(e.target.files[0]||null)} class="w-full text-sm text-gray-600"/>
             ${!token&&html`<div class="mt-1.5 flex items-center gap-2 flex-wrap">
               <span class="text-[11px] text-amber-600">לצירוף תמונה נדרשת התחברות ל-Google.</span>
@@ -2602,8 +2686,8 @@ function ExpensesPage({expenses,setExpenses,jobs,setTab,settings}) {
           <div class="grid grid-cols-2 gap-2">
             <button onClick=${add} disabled=${busy}
               class="bg-blue-500 text-white py-2 rounded-lg text-sm font-semibold hover:bg-blue-600 disabled:opacity-50">
-              ${busy?'...':'שמור'}</button>
-            <button onClick=${()=>{setOpen(false);setStatus('');}}
+              ${busy?'...':(editId?'שמור שינויים':'שמור')}</button>
+            <button onClick=${()=>{setOpen(false);resetForm();}}
               class="bg-gray-100 text-gray-700 py-2 rounded-lg text-sm font-semibold hover:bg-gray-200">ביטול</button>
           </div>
           ${status&&html`<div class=${'text-xs text-center py-1.5 px-3 rounded-lg '+(status.includes('שגיאה')?'bg-red-50 text-red-600':'bg-blue-50 text-blue-700')}>${status}</div>`}
@@ -2625,7 +2709,7 @@ function ExpensesPage({expenses,setExpenses,jobs,setTab,settings}) {
             <div class=${'flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center '+(x.reimbursed?'bg-emerald-50 text-emerald-600':'bg-amber-50 text-amber-600')}>
               <${Icon} name="wallet" size=${17}/>
             </div>
-            <div class="flex-1 min-w-0">
+            <div class="flex-1 min-w-0 cursor-pointer" onClick=${()=>startEdit(x)}>
               <div class="text-sm font-medium text-gray-800 truncate">${x.desc||'הוצאה'}</div>
               <div class="text-[11px] text-gray-400 truncate">
                 ${new Date(x.date+'T12:00:00').toLocaleDateString('he-IL',{day:'numeric',month:'long'})}
@@ -2635,6 +2719,8 @@ function ExpensesPage({expenses,setExpenses,jobs,setTab,settings}) {
             <div class="text-sm font-bold text-gray-800 flex-shrink-0">${fmt(x.amount)}</div>
             ${x.driveLink&&html`<a href=${x.driveLink} target="_blank" rel="noopener noreferrer"
               class="flex-shrink-0 p-1.5 rounded hover:bg-blue-50 text-gray-400 hover:text-blue-500" title="צפה בחשבונית"><${Icon} name="external" size=${15}/></a>`}
+            <button onClick=${()=>startEdit(x)} title="ערוך"
+              class="flex-shrink-0 p-1.5 rounded text-gray-400 hover:bg-blue-50 hover:text-blue-500"><${Icon} name="pencil" size=${15}/></button>
             <button onClick=${()=>toggleReimbursed(x.id)}
               class=${'flex-shrink-0 p-1.5 rounded '+(x.reimbursed?'text-emerald-600 hover:bg-emerald-50':'text-gray-400 hover:bg-emerald-50 hover:text-emerald-600')}
               title=${x.reimbursed?'בטל סימון החזר':'סמן שהוחזר'}><${Icon} name="check" size=${15}/></button>
