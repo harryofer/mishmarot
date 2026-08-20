@@ -390,7 +390,7 @@ const DAYS   = ['א׳','ב׳','ג׳','ד׳','ה׳','ו׳','ש׳'];
 const COLORS = [
   '#4A9EE0','#2FA8A0','#F2B441','#9B8CEA','#E0568C','#46C08A','#F0803C','#3FB6CC',
   '#7FC4F0','#6FD6C4','#FFD37A','#C3B5F5','#F58BB0','#86D9A8','#FFAE7A','#5FD0E8',
-  '#7D9BE8','#B565C9','#C9789F','#D69A5A','#7FA85C','#C4685E','#43A86B','#E8654F'
+  '#7D9BE8','#B565C9','#C9789F','#D69A5A','#7FA85C','#C4685E','#43A86B','#E8654F','#2C7A5B'
 ];
 
 // ── Helpers ──────────────────────────────────────────────────
@@ -741,7 +741,15 @@ function DashboardHero({net,gross,deductions,daysWorked,monthLabel,allPaid,today
     </div>
 
     <div class="mt-3 mb-3">
-      <div class="hero-track"><div class="hero-fill" style=${{width:Math.round(monthProgress*100)+'%'}}></div></div>
+      <div class="flex items-center justify-between mb-1">
+        <span class="hero-sub">${futureCount>0?'מהצפי החודשי':'מהחודש'}</span>
+        <span class="hero-sub">${Math.round(monthProgress*100)}%</span>
+      </div>
+      <div class="hero-track" role="progressbar" aria-valuemin="0" aria-valuemax="100"
+        aria-valuenow=${Math.round(monthProgress*100)}
+        aria-label=${futureCount>0?'התקדמות מול הצפי החודשי':'התקדמות החודש'}>
+        <div class="hero-fill" style=${{width:Math.round(monthProgress*100)+'%'}}></div>
+      </div>
     </div>
 
     ${futureCount>0&&html`
@@ -1998,9 +2006,12 @@ function DashboardPage({shifts,setShifts,jobs,settings,payslips,expenses,setTab}
       onAddShift=${()=>setTab&&setTab('shifts')}
       futureCount=${d.fut.length} forecastNet=${d.nF.net} forecastHours=${d.hrs}
       monthProgress=${(()=>{
+        // Earned so far against what the month is projected to reach, so the bar
+        // responds to logging work rather than only to the date changing.
+        if(d.gF>0) return Math.max(0,Math.min(1,d.gA/d.gF));
         const dim=mDays(year,month);
         const isCur=year===now.getFullYear()&&month===now.getMonth();
-        return isCur ? now.getDate()/dim : (d.ms.length?1:0);
+        return isCur ? now.getDate()/dim : 0;
       })()}/>
 
     ${d.monthlyTotal>0&&html`<div class="text-xs text-gray-500">כולל שכר חודשי קבוע ${fmt(d.monthlyTotal)}</div>`}
