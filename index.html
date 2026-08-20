@@ -668,13 +668,16 @@ function MonthStrip({year,month,onChange}) {
     const el=selRef.current;
     if(el&&el.scrollIntoView){ try{ el.scrollIntoView({inline:'center',block:'nearest'}); }catch(e){} }
   },[year,month]);
-  return html`<div class="space-y-1.5">
-    <div class="flex items-center justify-center gap-4">
-      <button onClick=${()=>onChange(year-1,month)} class="text-gray-400 hover:text-gray-600 text-base px-2">‹</button>
-      <span class="text-sm font-bold text-gray-700 w-14 text-center">${year}</span>
-      <button onClick=${()=>onChange(year+1,month)} class="text-gray-400 hover:text-gray-600 text-base px-2">›</button>
+  // Year control and months share one line so the strip costs a single row
+  return html`<div class="flex items-center gap-1.5">
+    <div class="flex items-center flex-shrink-0">
+      <button onClick=${()=>onChange(year-1,month)}
+        class="text-gray-400 hover:text-gray-600 text-sm px-1" aria-label="שנה קודמת">‹</button>
+      <span class="text-xs font-bold text-gray-700 tabular-nums">${year}</span>
+      <button onClick=${()=>onChange(year+1,month)}
+        class="text-gray-400 hover:text-gray-600 text-sm px-1" aria-label="שנה הבאה">›</button>
     </div>
-    <div class="month-strip flex gap-1.5 overflow-x-auto py-0.5">
+    <div class="month-strip flex gap-1.5 overflow-x-auto py-0.5 flex-1 min-w-0">
       ${MONTHS.map((l,i)=>{
         const sel=i===month, isNow=year===now.getFullYear()&&i===now.getMonth();
         return html`<button key=${i} ref=${sel?selRef:null} onClick=${()=>onChange(year,i)}
@@ -1992,10 +1995,7 @@ function DashboardPage({shifts,setShifts,jobs,settings,payslips,expenses,setTab}
     const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click();
   };
 
-  return html`<div class="space-y-5">
-    <div class="flex items-center justify-between flex-wrap gap-2">
-      <h2 class="text-base font-bold text-gray-800">סיכום חודשי</h2>
-    </div>
+  return html`<div class="space-y-4">
     <${MonthStrip} year=${year} month=${month} onChange=${(y,m)=>{setYear(y);setMonth(m);}}/>
 
     <${DashboardHero}
