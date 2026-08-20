@@ -324,6 +324,10 @@
     .hero-stat { color:var(--h-stat); font-weight:700; font-size:.95rem; font-variant-numeric:tabular-nums; }
     .hero-track { height:5px; border-radius:999px; background:var(--h-track); overflow:hidden; }
     .hero-fill  { height:100%; border-radius:999px; background:var(--h-fill); }
+    /* Sora has no bullet glyph, so the masked amount rendered as tofu boxes.
+       Drawing the dots in CSS keeps them font-independent. */
+    .mask-dots { display:inline-flex; align-items:center; gap:.16em; vertical-align:.10em; }
+    .mask-dots i { width:.30em; height:.30em; border-radius:50%; background:currentColor; opacity:.8; display:block; }
     .hero-forecast {
       display:flex; align-items:center; justify-content:space-between; gap:.5rem;
       margin-bottom:.9rem; padding:.5rem .65rem; border-radius:.6rem;
@@ -656,6 +660,10 @@ function DashboardHero({net,gross,deductions,daysWorked,monthLabel,allPaid,today
   const animate = !_privacy;
   const shown = useCountUp(net, animate);
   const hasToday = todayShifts.length>0;
+  // Masked figures are drawn, not typed — the display font has no bullet glyph
+  const money = v => _privacy
+    ? html`<span class="mask-dots"><i></i><i></i><i></i></span>`
+    : fmt(v);
   return html`<div class="hero">
     <div class="flex items-center justify-between gap-2 mb-1">
       <span class="hero-label">נטו ב${monthLabel}</span>
@@ -666,18 +674,20 @@ function DashboardHero({net,gross,deductions,daysWorked,monthLabel,allPaid,today
     </div>
 
     <div class="hero-amount">
-      <span class="hero-cur">₪</span>${_privacy?'•••':Math.round(shown).toLocaleString('he-IL')}
+      <span class="hero-cur">₪</span>${_privacy
+        ? html`<span class="mask-dots"><i></i><i></i><i></i></span>`
+        : Math.round(shown).toLocaleString('he-IL')}
     </div>
 
     <div class="flex items-center gap-4 mt-3">
       <div>
         <div class="hero-sub">ברוטו</div>
-        <div class="hero-stat">${fmt(gross)}</div>
+        <div class="hero-stat">${money(gross)}</div>
       </div>
       <div class="w-px self-stretch hero-divider"></div>
       <div>
         <div class="hero-sub">ניכויים</div>
-        <div class="hero-stat">−${fmt(deductions)}</div>
+        <div class="hero-stat">−${money(deductions)}</div>
       </div>
     </div>
 
@@ -689,7 +699,7 @@ function DashboardHero({net,gross,deductions,daysWorked,monthLabel,allPaid,today
       <div class="hero-forecast">
         <span class="flex items-center gap-1.5"><${Icon} name="trend" size=${13}/> נטו צפוי לסוף החודש</span>
         <span class="flex items-center gap-2">
-          <span class="hero-forecast-val">${fmt(forecastNet)}</span>
+          <span class="hero-forecast-val">${money(forecastNet)}</span>
           <span class="hero-forecast-sub">${futureCount} משמרות · ${forecastHours} שע'</span>
         </span>
       </div>`}
