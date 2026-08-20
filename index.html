@@ -668,14 +668,42 @@ function MonthStrip({year,month,onChange}) {
     const el=selRef.current;
     if(el&&el.scrollIntoView){ try{ el.scrollIntoView({inline:'center',block:'nearest'}); }catch(e){} }
   },[year,month]);
-  // Year control and months share one line so the strip costs a single row
+  // Year is one tappable chip rather than two cramped arrows, so it stays a
+  // single row without shrinking the target.
+  const [yrOpen,setYrOpen]=useState(false);
+  const yrRef=useRef(null);
+  useEffect(()=>{
+    if(!yrOpen) return;
+    const away=e=>{ if(yrRef.current&&!yrRef.current.contains(e.target)) setYrOpen(false); };
+    const esc=e=>{ if(e.key==='Escape') setYrOpen(false); };
+    document.addEventListener('pointerdown',away);
+    document.addEventListener('keydown',esc);
+    return ()=>{ document.removeEventListener('pointerdown',away); document.removeEventListener('keydown',esc); };
+  },[yrOpen]);
+  const yrs=(()=>{
+    const c=now.getFullYear(), s=new Set();
+    for(let y=c-4;y<=c+1;y++) s.add(y);
+    s.add(year);
+    return [...s].sort((a,b)=>b-a);
+  })();
+
   return html`<div class="flex items-center gap-1.5">
-    <div class="flex items-center flex-shrink-0">
-      <button onClick=${()=>onChange(year-1,month)}
-        class="text-gray-400 hover:text-gray-600 text-sm px-1" aria-label="שנה קודמת">‹</button>
-      <span class="text-xs font-bold text-gray-700 tabular-nums">${year}</span>
-      <button onClick=${()=>onChange(year+1,month)}
-        class="text-gray-400 hover:text-gray-600 text-sm px-1" aria-label="שנה הבאה">›</button>
+    <div class="relative flex-shrink-0" ref=${yrRef}>
+      <button onClick=${()=>setYrOpen(o=>!o)}
+        aria-haspopup="listbox" aria-expanded=${yrOpen}
+        class="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors">
+        <span class="tabular-nums">${year}</span>
+        <span class="text-[9px] text-gray-400">▾</span>
+      </button>
+      ${yrOpen&&html`
+        <div role="listbox"
+          class="absolute z-50 mt-1 right-0 bg-white border border-gray-200 rounded-lg shadow-2xl py-1 min-w-[5rem]">
+          ${yrs.map(y=>html`
+            <button key=${y} role="option" aria-selected=${y===year}
+              onClick=${()=>{onChange(y,month);setYrOpen(false);}}
+              class=${'block w-full text-right px-3 py-1.5 text-xs tabular-nums transition-colors '+(y===year?'bg-blue-500 text-white font-bold':'text-gray-700 hover:bg-gray-100')}>
+              ${y}</button>`)}
+        </div>`}
     </div>
     <div class="month-strip flex gap-1.5 overflow-x-auto py-0.5 flex-1 min-w-0">
       ${MONTHS.map((l,i)=>{
@@ -1095,10 +1123,12 @@ function CalendarView({year,month,shifts,jobs,onDayClick,onShiftClick,onRangeSel
       <span class="text-xs font-medium text-gray-500">${MONTHS[month]} ${year}</span>
       <span class="text-xs font-semibold text-blue-600 bg-blue-50 rounded-full px-2 py-0.5">${shifts.length} משמרות החודש</span>
     </div>
-    <div class="grid grid-cols-7 gap-0.5 mb-1">
+    <!-- Grid runs left-to-right so Sunday sits on the left, as in Google Calendar.
+         Cell contents stay RTL so Hebrew still reads correctly. -->
+    <div dir="ltr" class="grid grid-cols-7 gap-0.5 mb-1">
       ${DAYS.map(d=>html`<div key=${d} class="text-center text-xs font-medium text-gray-400 py-1">${d}</div>`)}
     </div>
-    <div class="grid grid-cols-7 gap-0.5">
+    <div dir="ltr" class="grid grid-cols-7 gap-0.5">
       ${cells.map((day,i)=>{
         if(!day) return html`<div key=${'e'+i}/>`;
         const ds=`${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
@@ -1110,7 +1140,7 @@ function CalendarView({year,month,shifts,jobs,onDayClick,onShiftClick,onRangeSel
            unconfirmed?'border-amber-300 bg-amber-50/60 ':
            'border-transparent hover:border-gray-200 hover:bg-gray-50 ')+
           (isPast&&!isT&&!inDrag&&!unconfirmed?'bg-gray-50/40':'');
-        return html`<div key=${day} class=${cls} data-date=${ds}
+        return html`<div key=${day} dir="rtl" class=${cls} data-date=${ds}
           onMouseDown=${e=>{
             if(tRef.current.isTouch) return;
             e.preventDefault();
@@ -1694,6 +1724,8 @@ function ShiftsPage({shifts,setShifts,jobs}) {
   const sorted=[...ms].sort((a,b)=>b.date<a.date?-1:b.date>a.date?1:0);
 
   return html`<div class="space-y-4">
+    <${MonthStrip} year=${year} month=${month} onChange=${(y,m)=>{setYear(y);setMonth(m);}}/>
+
     <div class="space-y-2">
       <div class="grid grid-cols-2 gap-2">
         ${[['calendar','calendar','לוח'],['list','list','רשימה']].map(([v,ic,l])=>html`
@@ -1710,7 +1742,6 @@ function ShiftsPage({shifts,setShifts,jobs}) {
           class="bg-red-500 text-white px-1 py-2 rounded-lg text-xs font-semibold hover:bg-red-600 transition-colors flex items-center justify-center gap-1 text-center leading-tight"><${Icon} name="trash" size=${14}/><span>מחיקה מרובה</span></button>
       </div>
     </div>
-    <${MonthStrip} year=${year} month=${month} onChange=${(y,m)=>{setYear(y);setMonth(m);}}/>
 
     <${UnconfirmedPanel} shifts=${shifts} jobs=${jobs}
       onMarkArrived=${markArrivedRange}
