@@ -1,15 +1,13 @@
 // Service Worker — offline support for מעקב משמרות
-const CACHE = 'mishmarot-v2';
+const CACHE = 'mishmarot-v3';
 
 // Everything needed to boot the app with no network
+// preact/hooks/htm are inlined in index.html now, so nothing to fetch for them
 const PRECACHE = [
   './',
   './index.html',
   './icon.jpg',
-  'https://cdn.tailwindcss.com',
-  'https://unpkg.com/preact@10/dist/preact.umd.js',
-  'https://unpkg.com/preact@10/hooks/dist/hooks.umd.js',
-  'https://unpkg.com/htm/dist/htm.umd.js'
+  'https://cdn.tailwindcss.com'
 ];
 
 self.addEventListener('install', e => {
@@ -59,6 +57,15 @@ self.addEventListener('notificationclick', e => {
   );
 });
 
+// A page that boots faster than the background check would miss the pushed
+// notice, so the flag is kept and the page can ask for it once it is listening.
+let updatePending = false;
+self.addEventListener('message', e => {
+  if (e.data && e.data.type === 'query-update' && updatePending && e.source) {
+    e.source.postMessage({ type: 'update-ready' });
+  }
+});
+
 self.addEventListener('fetch', e => {
   const req = e.request;
   if (req.method !== 'GET') return;
@@ -67,21 +74,47 @@ self.addEventListener('fetch', e => {
   // Never cache Google API/auth traffic — it must be live, and failing offline is expected
   if (/googleapis\.com|accounts\.google\.com|gstatic\.com/.test(url.hostname)) return;
 
-  // Navigations: network-first so updates land, falling back to the cached shell offline
+  // Navigations: serve the cached shell immediately so the app opens at once,
+  // then check the network in the background. Network-first meant every single
+  // open waited on a full download of index.html before painting anything.
   if (req.mode === 'navigate') {
-    e.respondWith(
-      fetch(req)
-        .then(r => {
-          // Only overwrite the cached shell with a good response — a Pages deploy
-          // can briefly serve errors, and caching one would strand old clients
-          if (r.ok) {
-            const copy = r.clone();
-            caches.open(CACHE).then(c => c.put('./index.html', copy)).catch(() => {});
-          }
-          return r;
-        })
-        .catch(() => caches.match('./index.html').then(r => r || caches.match('./')))
-    );
+    e.respondWith((async () => {
+      const cache = await caches.open(CACHE);
+      const cached = await cache.match('./index.html');
+      // Read the old copy before handing it to the page - a body can only be read once
+      const oldText = cached ? await cached.clone().text() : null;
+
+      const fromNetwork = fetch(req).then(async r => {
+        // Only trust a good response; a Pages deploy can briefly serve errors,
+        // and caching one would strand every client on it
+        if (!r || !r.ok) return r;
+        // Read the body exactly once and rebuild from the text. Cloning a
+        // response and leaving a branch unread stalls the others once the tee
+        // buffer fills, which silently blocked the cache write.
+        const freshText = await r.text();
+        const mk = () => new Response(freshText, {
+          headers: { 'Content-Type': 'text/html; charset=utf-8' }
+        });
+        await cache.put('./index.html', mk());
+        if (oldText !== null && oldText !== freshText) {
+          updatePending = true;
+          const list = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+          for (const c of list) c.postMessage({ type: 'update-ready' });
+        } else {
+          // Served copy already matches the network - clear the flag, or the
+          // next page would be told about an update it is already running
+          updatePending = false;
+        }
+        return mk();
+      }).catch(() => null);
+
+      if (cached) {
+        e.waitUntil(fromNetwork);   // keep the worker alive for the background check
+        return cached;
+      }
+      // Nothing cached yet (first ever visit) - the network is all we have
+      return (await fromNetwork) || (await cache.match('./')) || Response.error();
+    })());
     return;
   }
 
