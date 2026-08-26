@@ -573,16 +573,23 @@ const escapeHtml = s => String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 // Only allow http(s) URLs in hrefs (blocks javascript:/data: injected via tampered backups)
 function safeUrl(u){ try{ const x=new URL(u); return (x.protocol==='https:'||x.protocol==='http:')?u:null; }catch(e){ return null; } }
 
+// iOS WhatsApp takes either the files or the text from a share, never both,
+// so on iPhone the summary has to be part of the picture or it is lost.
+const IS_IOS=/iPhone|iPad|iPod/i.test(navigator.userAgent);
+
 // ── Share header card ────────────────────────────────────────
 // WhatsApp renders share({files,text}) as "first file, with the text as its
 // caption", and nothing web-side can move the text elsewhere (single text
 // slot in the Android intent; placement is WhatsApp's hardcoded choice).
 // So the first file is a purpose-made letterhead card: the thread opens with
-// the card + the full summary as copyable text under it, then the receipts
-// follow in date order.
-async function makeShareCard(period){
+// the card + the summary, then the receipts follow in date order. `body`
+// paints the summary onto the card itself, for platforms that drop the text.
+async function makeShareCard(period, body){
   try{
-    const W=1080,H=400;
+    const lines=(body||'').split('\n');
+    // HEAD is the letterhead block; the card only grows downward for the body,
+    // so the title and logo stay anchored to it instead of drifting into the text
+    const LH=52, W=1080, HEAD=400, H=HEAD+(body?lines.length*LH+70:0);
     const cv=document.createElement('canvas'); cv.width=W; cv.height=H;
     const ctx=cv.getContext('2d');
     ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,W,H);
@@ -591,7 +598,7 @@ async function makeShareCard(period){
     // App logo on the right (best effort — the card works without it)
     try{
       const img=await new Promise((res,rej)=>{const i=new Image(); i.onload=()=>res(i); i.onerror=rej; i.src='./icon.jpg';});
-      const S=170, x=W-70-S, y=(H-S)/2+5, r=36;
+      const S=170, x=W-70-S, y=(HEAD-S)/2+5, r=36;
       ctx.save(); ctx.beginPath();
       ctx.moveTo(x+r,y); ctx.arcTo(x+S,y,x+S,y+S,r); ctx.arcTo(x+S,y+S,x,y+S,r);
       ctx.arcTo(x,y+S,x,y,r); ctx.arcTo(x,y,x+S,y,r); ctx.closePath(); ctx.clip();
@@ -600,9 +607,20 @@ async function makeShareCard(period){
     }catch(e){}
     ctx.direction='rtl'; ctx.textAlign='right';
     ctx.fillStyle='#0B1017'; ctx.font='bold 84px sans-serif';
-    ctx.fillText('סיכום עבודה',tx,H/2-14);
+    ctx.fillText('סיכום עבודה',tx,HEAD/2-14);
     ctx.fillStyle='#3B82F6'; ctx.font='56px sans-serif';
-    ctx.fillText(period,tx,H/2+74);
+    ctx.fillText(period,tx,HEAD/2+74);
+    if(body){
+      ctx.strokeStyle='#E5E7EB'; ctx.lineWidth=2;
+      ctx.beginPath(); ctx.moveTo(70,HEAD-40); ctx.lineTo(W-70,HEAD-40); ctx.stroke();
+      let y=HEAD+18;
+      lines.forEach(t=>{
+        const head=/^סיכום עבודה|^הוצאות להחזר|^סה"כ/.test(t);
+        ctx.fillStyle=head?'#0B1017':'#374151';
+        ctx.font=(head?'bold ':'')+'40px sans-serif';
+        ctx.fillText(t,W-70,y); y+=LH;
+      });
+    }
     const blob=await new Promise(res=>cv.toBlob(res,'image/png'));
     return blob?new File([blob],'סיכום_'+period.replace(/\s/g,'_')+'.png',{type:'image/png'}):null;
   }catch(e){ return null; }
@@ -2016,7 +2034,8 @@ function DashboardPage({shifts,setShifts,jobs,settings,payslips,expenses,setTab}
           files.push(new File([b], x.fileName||('חשבונית_'+x.date+'.jpg'), {type:b.type||'image/jpeg'}));
         }
         setRcptBusy('מכין כרטיס פתיחה...');
-        const card=await makeShareCard(sharePeriod());
+        // iPhone drops the shared text next to files, so the card carries it there
+        const card=await makeShareCard(sharePeriod(), IS_IOS?shareText():'');
         const out=card?[card,...files]:files;
         setRcptBusy('');
         if(navigator.canShare&&navigator.canShare({files:out})){
@@ -2027,6 +2046,13 @@ function DashboardPage({shifts,setShifts,jobs,settings,payslips,expenses,setTab}
         alert('המכשיר לא תומך בשליחת קבצים ישירות. הטקסט ייפתח בוואטסאפ והחשבוניות יורדו למכשיר.');
         out.forEach(f=>{const a=document.createElement('a');a.href=URL.createObjectURL(f);a.download=f.name;a.click();});
       }catch(e){ setRcptBusy(''); alert('שגיאה בהורדת החשבוניות: '+e.message); return; }
+    }
+    // On phones, the system share sheet sends the text and returns to the app.
+    // A wa.me tab is kept for desktop only — on an installed iOS app it opened
+    // an in-app browser window that lingered as a blank overlay after sending.
+    if(navigator.share && /iPhone|iPad|Android|Mobile/i.test(navigator.userAgent)){
+      try{ await navigator.share({text:shareText()}); return; }
+      catch(e){ if(e.name==='AbortError') return; }
     }
     window.open('https://wa.me/?text='+encodeURIComponent(shareText()),'_blank','noopener,noreferrer');
   };
