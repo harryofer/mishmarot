@@ -573,6 +573,41 @@ const escapeHtml = s => String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 // Only allow http(s) URLs in hrefs (blocks javascript:/data: injected via tampered backups)
 function safeUrl(u){ try{ const x=new URL(u); return (x.protocol==='https:'||x.protocol==='http:')?u:null; }catch(e){ return null; } }
 
+// ── Share header card ────────────────────────────────────────
+// WhatsApp renders share({files,text}) as "first file, with the text as its
+// caption", and nothing web-side can move the text elsewhere (single text
+// slot in the Android intent; placement is WhatsApp's hardcoded choice).
+// So the first file is a purpose-made letterhead card: the thread opens with
+// the card + the full summary as copyable text under it, then the receipts
+// follow in date order.
+async function makeShareCard(period){
+  try{
+    const W=1080,H=400;
+    const cv=document.createElement('canvas'); cv.width=W; cv.height=H;
+    const ctx=cv.getContext('2d');
+    ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,W,H);
+    ctx.fillStyle='#3B82F6'; ctx.fillRect(0,0,W,10);
+    let tx=W-70;
+    // App logo on the right (best effort — the card works without it)
+    try{
+      const img=await new Promise((res,rej)=>{const i=new Image(); i.onload=()=>res(i); i.onerror=rej; i.src='./icon.jpg';});
+      const S=170, x=W-70-S, y=(H-S)/2+5, r=36;
+      ctx.save(); ctx.beginPath();
+      ctx.moveTo(x+r,y); ctx.arcTo(x+S,y,x+S,y+S,r); ctx.arcTo(x+S,y+S,x,y+S,r);
+      ctx.arcTo(x,y+S,x,y,r); ctx.arcTo(x,y,x+S,y,r); ctx.closePath(); ctx.clip();
+      ctx.drawImage(img,x,y,S,S); ctx.restore();
+      tx=x-56;
+    }catch(e){}
+    ctx.direction='rtl'; ctx.textAlign='right';
+    ctx.fillStyle='#0B1017'; ctx.font='bold 84px sans-serif';
+    ctx.fillText('סיכום עבודה',tx,H/2-14);
+    ctx.fillStyle='#3B82F6'; ctx.font='56px sans-serif';
+    ctx.fillText(period,tx,H/2+74);
+    const blob=await new Promise(res=>cv.toBlob(res,'image/png'));
+    return blob?new File([blob],'סיכום_'+period.replace(/\s/g,'_')+'.png',{type:'image/png'}):null;
+  }catch(e){ return null; }
+}
+
 // ── Icons (inline SVG, stroke style) ─────────────────────────
 const IPATH={
   dashboard:'M3 3h7v9H3zM14 3h7v5h-7zM14 12h7v9h-7zM3 16h7v5H3z',
@@ -1973,25 +2008,24 @@ function DashboardPage({shifts,setShifts,jobs,settings,payslips,expenses,setTab}
       setRcptBusy('מוריד חשבוניות...');
       try{
         const files=[];
-        // Order test: WhatsApp attaches the shared text to one photo of the batch
-        // and sends that photo as its own message before the rest. Sending newest
-        // first — if the summary moves with the flip, order is what decides where
-        // the text lands, and the batch can be arranged to put it last.
-        for(const x of picked.slice().reverse()){
+        for(const x of picked){
           const r=await fetch('https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(x.driveFileId)+'?alt=media',
             {headers:{Authorization:'Bearer '+_gToken}});
           if(!r.ok) throw new Error('הורדה נכשלה');
           const b=await r.blob();
           files.push(new File([b], x.fileName||('חשבונית_'+x.date+'.jpg'), {type:b.type||'image/jpeg'}));
         }
+        setRcptBusy('מכין כרטיס פתיחה...');
+        const card=await makeShareCard(sharePeriod());
+        const out=card?[card,...files]:files;
         setRcptBusy('');
-        if(navigator.canShare&&navigator.canShare({files})){
-          try{ await navigator.share({files,text:shareText()}); return; }
+        if(navigator.canShare&&navigator.canShare({files:out})){
+          try{ await navigator.share({files:out,text:shareText()}); return; }
           catch(e){ if(e.name==='AbortError') return; }
         }
         // No file-share support (usually desktop) — send the text and hand over the files
         alert('המכשיר לא תומך בשליחת קבצים ישירות. הטקסט ייפתח בוואטסאפ והחשבוניות יורדו למכשיר.');
-        files.forEach(f=>{const a=document.createElement('a');a.href=URL.createObjectURL(f);a.download=f.name;a.click();});
+        out.forEach(f=>{const a=document.createElement('a');a.href=URL.createObjectURL(f);a.download=f.name;a.click();});
       }catch(e){ setRcptBusy(''); alert('שגיאה בהורדת החשבוניות: '+e.message); return; }
     }
     window.open('https://wa.me/?text='+encodeURIComponent(shareText()),'_blank','noopener,noreferrer');
@@ -2103,7 +2137,7 @@ function DashboardPage({shifts,setShifts,jobs,settings,payslips,expenses,setTab}
                     <span class="text-gray-400 flex-shrink-0">${fmt(x.amount)}</span>
                   </label>`)}
               </div>
-              <div class="text-[11px] text-gray-400">${rcptPick.size} מתוך ${receipts.length} ייצורפו</div>`}
+              <div class="text-[11px] text-gray-400">${rcptPick.size} מתוך ${receipts.length} ייצורפו · כרטיס פתיחה עם הסיכום יופיע ראשון</div>`}
           </div>`}
         ${rcptBusy&&html`<div class="text-xs text-center py-1.5 rounded-lg bg-blue-50 text-blue-700">${rcptBusy}</div>`}
         <button onClick=${shareWhatsApp} class="w-full text-sm bg-emerald-50 text-emerald-700 py-2.5 rounded-lg hover:bg-emerald-100 font-medium flex items-center justify-center gap-2">
