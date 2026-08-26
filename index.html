@@ -495,7 +495,10 @@ function googleConnect(settings, onDone) {
         saveGTok(r.access_token);
         onDone && onDone(r.access_token);
       }
-    }).requestAccessToken({ prompt: 'consent' });
+      // Empty prompt reuses a grant that already exists and only asks when it
+      // does not. 'consent' forced the full Google consent screen — and with it
+      // the unverified-app warning — on every single sign-in.
+    }).requestAccessToken({ prompt: '' });
   } catch(e) { alert('שגיאת התחברות: ' + e.message); }
 }
 
@@ -2403,7 +2406,7 @@ function GoogleDriveSection({settings,setSettings,jobs,shifts,payslips,expenses,
   const connect = () => {
     if (!gReady()) return alert('ספריית Google טרם נטענה. נסה שוב בעוד שנייה.');
     setSettings(s=>({...s,gConnected:true}));
-    const c=getClient(); if(c) c.requestAccessToken({prompt:'consent'});
+    const c=getClient(); if(c) c.requestAccessToken({prompt:''});
   };
 
   // Silent re-connect on load if previously connected (keeps you "logged in")
