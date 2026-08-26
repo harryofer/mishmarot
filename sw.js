@@ -1,5 +1,5 @@
 // Service Worker — offline support for מעקב משמרות
-const CACHE = 'mishmarot-v1';
+const CACHE = 'mishmarot-v2';
 
 // Everything needed to boot the app with no network
 const PRECACHE = [
@@ -17,7 +17,8 @@ self.addEventListener('install', e => {
     caches.open(CACHE)
       // addAll fails atomically if any request fails; cache each one independently instead
       .then(c => Promise.all(PRECACHE.map(u =>
-        fetch(u, { mode: 'no-cors' }).then(r => c.put(u, r)).catch(() => {})
+        // cache:'reload' skips the HTTP cache so a stale copy is never re-precached
+        fetch(u, { mode: 'no-cors', cache: 'reload' }).then(r => c.put(u, r)).catch(() => {})
       )))
       .then(() => self.skipWaiting())
   );
@@ -71,8 +72,12 @@ self.addEventListener('fetch', e => {
     e.respondWith(
       fetch(req)
         .then(r => {
-          const copy = r.clone();
-          caches.open(CACHE).then(c => c.put('./index.html', copy)).catch(() => {});
+          // Only overwrite the cached shell with a good response — a Pages deploy
+          // can briefly serve errors, and caching one would strand old clients
+          if (r.ok) {
+            const copy = r.clone();
+            caches.open(CACHE).then(c => c.put('./index.html', copy)).catch(() => {});
+          }
           return r;
         })
         .catch(() => caches.match('./index.html').then(r => r || caches.match('./')))
