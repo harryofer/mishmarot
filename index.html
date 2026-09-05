@@ -2920,7 +2920,7 @@ function ExpensesPage({expenses,setExpenses,jobs,setTab,settings}) {
   </div>`;
 }
 
-function PayslipsPage({payslips,setPayslips,setShifts,jobs,setTab,settings}) {
+function PayslipsPage({payslips,setPayslips,setShifts,jobs,setTab,settings,expenses,setExpenses}) {
   const activeJobs=(jobs||[]).filter(j=>!j.deleted);
   const [token, setToken] = useState(()=>_gToken);
   const [month, setMonth] = useState(()=>{const n=new Date();return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');});
@@ -2928,11 +2928,28 @@ function PayslipsPage({payslips,setPayslips,setShifts,jobs,setTab,settings}) {
   const [file,  setFile]  = useState(null);
   const [busy,  setBusy]  = useState(false);
   const [status,setStatus]= useState('');
+  const [notes, setNotes] = useState('');
+  // Ids of this month's expenses that did NOT come back in this payslip.
+  // Empty is the normal case and means the whole month was reimbursed.
+  const [unpaid,setUnpaid] = useState(()=>new Set());
 
   useEffect(()=>{
     const iv=setInterval(()=>{ if(_gToken!==token) setToken(_gToken); },1000);
     return ()=>clearInterval(iv);
   },[token]);
+
+  // The expenses this payslip is expected to settle. An expense with no job on
+  // it belongs to no other payslip either, so it is included rather than stranded.
+  const monthExpenses=useMemo(()=>
+    (expenses||[])
+      .filter(x=>x.date.slice(0,7)===month&&(!jobId||!x.jobId||x.jobId===jobId))
+      .sort((a,b)=>a.date<b.date?-1:1)
+  ,[expenses,month,jobId]);
+  // A different month or job means a different list — old ticks no longer apply
+  useEffect(()=>{ setUnpaid(new Set()); },[month,jobId]);
+  const toggleUnpaid=id=>setUnpaid(p=>{const n=new Set(p); n.has(id)?n.delete(id):n.add(id); return n;});
+  const reimbursedNow=monthExpenses.filter(x=>!unpaid.has(x.id));
+  const reimbursedSum=reimbursedNow.reduce((n,x)=>n+(x.amount||0),0);
 
   const upload = async () => {
     if(!token) return alert('יש להתחבר לחשבון Google תחילה (בהגדרות)');
@@ -2947,10 +2964,23 @@ function PayslipsPage({payslips,setPayslips,setShifts,jobs,setTab,settings}) {
       const meta={name:'תלוש_'+month+(jn?'_'+jn:'')+'_'+file.name, mimeType:file.type||'application/octet-stream'};
       const res=await uploadFileToDrive(file,meta);
       const link=safeUrl(res.webViewLink)||('https://drive.google.com/file/d/'+encodeURIComponent(res.id)+'/view');
-      setPayslips(list=>[...list,{id:genId(),month,jobId:jobId||null,name:file.name,driveFileId:res.id,driveLink:link,uploadedAt:new Date().toISOString()}]);
+      const notPaid=monthExpenses.filter(x=>unpaid.has(x.id)).map(x=>x.id);
+      setPayslips(list=>[...list,{id:genId(),month,jobId:jobId||null,name:file.name,
+        driveFileId:res.id,driveLink:link,uploadedAt:new Date().toISOString(),
+        notes:notes.trim(),unpaidExpenseIds:notPaid}]);
       // Mark that month's shifts as paid — only for the linked job (or all if none chosen)
       setShifts&&setShifts(arr=>arr.map(s=>(s.date.slice(0,7)===month&&(!jobId||s.jobId===jobId))?{...s,isPaid:true}:s));
-      setFile(null); setStatus('הועלה בהצלחה ✓ — משמרות החודש'+(jn?' של "'+jn+'"':'')+' סומנו כשולם');
+      // The payslip is also the reimbursement, so the same month's expenses are
+      // settled by it — except any explicitly ticked as still owed
+      const settled=reimbursedNow.length;
+      if(setExpenses&&monthExpenses.length){
+        const ids=new Set(monthExpenses.map(x=>x.id));
+        setExpenses(list=>list.map(x=>ids.has(x.id)?{...x,reimbursed:!unpaid.has(x.id)}:x));
+      }
+      setFile(null); setNotes(''); setUnpaid(new Set());
+      setStatus('הועלה בהצלחה ✓ — משמרות החודש'+(jn?' של "'+jn+'"':'')+' סומנו כשולם'
+        +(settled?' · '+settled+' '+(settled===1?'הוצאה סומנה':'הוצאות סומנו')+' כהוחזרו':'')
+        +(notPaid.length?' · '+notPaid.length+' נשארו ממתינות':''));
     }catch(e){ setStatus('שגיאה: '+e.message); }
     setBusy(false);
   };
@@ -3017,6 +3047,36 @@ function PayslipsPage({payslips,setPayslips,setShifts,jobs,setTab,settings}) {
             ${activeJobs.map(j=>html`<option key=${j.id} value=${j.id}>${j.name}</option>`)}
           </select>
         </div>`}
+        ${monthExpenses.length>0&&html`
+          <div class="rounded-xl border border-amber-100 bg-amber-50/60 p-3 space-y-2">
+            <div class="text-xs font-semibold text-amber-800 flex items-center gap-1.5">
+              <${Icon} name="wallet" size=${14}/> החזר הוצאות לחודש זה
+            </div>
+            <div class="text-[11px] text-amber-700 leading-4">
+              התלוש מסמן את כל ההוצאות של החודש כהוחזרו. סמן כאן רק מה ש<b>לא</b> קיבלת בחזרה.
+            </div>
+            <div class="space-y-1 max-h-44 overflow-y-auto">
+              ${monthExpenses.map(x=>html`
+                <label key=${x.id} class="flex items-center gap-2 cursor-pointer select-none text-[11px] bg-white rounded-lg px-2 py-1.5 border border-amber-100">
+                  <input type="checkbox" checked=${unpaid.has(x.id)} onChange=${()=>toggleUnpaid(x.id)} class="w-3.5 h-3.5 rounded flex-shrink-0"/>
+                  <span class=${'flex-1 min-w-0 truncate '+(unpaid.has(x.id)?'text-amber-700 font-medium':'text-gray-600')}>
+                    ${x.date.slice(8,10)}/${x.date.slice(5,7)} · ${x.desc||'הוצאה'}
+                  </span>
+                  <span class=${'flex-shrink-0 '+(unpaid.has(x.id)?'text-amber-700':'text-gray-400')}>${fmt(x.amount)}</span>
+                </label>`)}
+            </div>
+            <div class="text-[11px] text-amber-800 border-t border-amber-100 pt-1.5">
+              ${unpaid.size===0
+                ? 'הכל יסומן כהוחזר — סה"כ '+fmt(reimbursedSum)
+                : reimbursedNow.length+' מתוך '+monthExpenses.length+' יסומנו כהוחזרו ('+fmt(reimbursedSum)+') · '+unpaid.size+' יישארו ממתינות'}
+            </div>
+          </div>`}
+        <div>
+          <label class="block text-xs font-medium text-gray-500 mb-1">הערות (לא חובה)</label>
+          <textarea value=${notes} onInput=${e=>setNotes(e.target.value)} rows="2"
+            placeholder="למשל: החזר הדלק לא נכלל, יגיע בתלוש הבא"
+            class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm resize-y focus:outline-none focus:ring-2 focus:ring-blue-300"></textarea>
+        </div>
         <label class="block border-2 border-dashed border-gray-200 rounded-xl p-5 text-center cursor-pointer hover:border-blue-300 hover:bg-blue-50 transition-colors">
           <div class=${'flex justify-center mb-2 '+(file?'text-emerald-500':'text-gray-300')}><${Icon} name=${file?'check':'upload'} size=${30}/></div>
           <div class="text-sm text-gray-600 truncate px-2">${file?file.name:'לחץ לבחירת תמונה או PDF'}</div>
@@ -3045,15 +3105,27 @@ function PayslipsPage({payslips,setPayslips,setShifts,jobs,setTab,settings}) {
           ${g.items.map((p,pi)=>{const pj=p.jobId?findJob(jobs,p.jobId):null; const c=(pj&&pj.color)||COLORS[(gi+pi)%COLORS.length];return html`
             <div key=${p.id} class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex items-stretch">
               <div class="w-1.5 flex-shrink-0" style=${{backgroundColor:c}}/>
-              <div class="flex items-center gap-3 p-3 flex-1 min-w-0">
-                <div class="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0" style=${{backgroundColor:c+'22',color:c}}><${Icon} name="file" size=${20}/></div>
-                <div class="flex-1 min-w-0">
-                  <div class="text-sm font-bold text-gray-800 truncate">${pj?pj.name:'תלוש'} · ${g.label}</div>
-                  <div class="text-xs text-gray-400 truncate">הועלה ${new Date(p.uploadedAt).toLocaleDateString('he-IL')}</div>
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-3 p-3 min-w-0">
+                  <div class="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0" style=${{backgroundColor:c+'22',color:c}}><${Icon} name="file" size=${20}/></div>
+                  <div class="flex-1 min-w-0">
+                    <div class="text-sm font-bold text-gray-800 truncate">${pj?pj.name:'תלוש'} · ${g.label}</div>
+                    <div class="text-xs text-gray-400 truncate">הועלה ${new Date(p.uploadedAt).toLocaleDateString('he-IL')}</div>
+                  </div>
+                  <a href=${safeUrl(p.driveLink)||'#'} target="_blank" rel="noopener noreferrer"
+                    class="flex-shrink-0 bg-blue-50 text-blue-600 rounded-lg px-3 py-1.5 text-xs font-semibold hover:bg-blue-100 transition-colors flex items-center gap-1"><${Icon} name="eye" size=${13}/> צפה</a>
+                  <button onClick=${()=>del(p)} class="flex-shrink-0 p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500"><${Icon} name="trash" size=${16}/></button>
                 </div>
-                <a href=${safeUrl(p.driveLink)||'#'} target="_blank" rel="noopener noreferrer"
-                  class="flex-shrink-0 bg-blue-50 text-blue-600 rounded-lg px-3 py-1.5 text-xs font-semibold hover:bg-blue-100 transition-colors flex items-center gap-1"><${Icon} name="eye" size=${13}/> צפה</a>
-                <button onClick=${()=>del(p)} class="flex-shrink-0 p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500"><${Icon} name="trash" size=${16}/></button>
+                ${!!(p.notes||(p.unpaidExpenseIds&&p.unpaidExpenseIds.length))&&html`
+                  <div class="px-3 pb-3 -mt-1 space-y-1">
+                    ${p.unpaidExpenseIds&&p.unpaidExpenseIds.length>0&&html`
+                      <div class="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-2 py-1.5 flex items-center gap-1.5">
+                        <${Icon} name="wallet" size=${12}/>
+                        ${p.unpaidExpenseIds.length===1?'החזר הוצאה אחד לא נכלל':p.unpaidExpenseIds.length+' החזרי הוצאות לא נכללו'}
+                      </div>`}
+                    ${p.notes&&html`
+                      <div class="text-[11px] text-gray-600 bg-gray-50 rounded-lg px-2 py-1.5 whitespace-pre-wrap break-words">${p.notes}</div>`}
+                  </div>`}
               </div>
             </div>`;})}
         </div>`)}
@@ -3482,7 +3554,7 @@ function App() {
         ${tab==='dashboard'&&html`<${DashboardPage} shifts=${shifts} setShifts=${setShifts} jobs=${jobs} settings=${settings} payslips=${payslips} expenses=${expenses} setTab=${setTab}/>`}
         ${tab==='shifts'   &&html`<${ShiftsPage}    shifts=${shifts} setShifts=${setShifts} jobs=${jobs}/>`}
         ${tab==='jobs'     &&html`<${JobsPage}       jobs=${jobs}    setJobs=${setJobs} shifts=${shifts} setShifts=${setShifts}/>`}
-        ${tab==='payslips' &&html`<${PayslipsPage}   payslips=${payslips} setPayslips=${setPayslips} setShifts=${setShifts} jobs=${jobs} setTab=${setTab} settings=${settings}/>`}
+        ${tab==='payslips' &&html`<${PayslipsPage}   payslips=${payslips} setPayslips=${setPayslips} setShifts=${setShifts} jobs=${jobs} setTab=${setTab} settings=${settings} expenses=${expenses} setExpenses=${setExpenses}/>`}
         ${tab==='expenses' &&html`<${ExpensesPage}   expenses=${expenses} setExpenses=${setExpenses} jobs=${jobs} setTab=${setTab} settings=${settings}/>`}
         ${tab==='settings' &&html`<${SettingsPage}   settings=${settings} setSettings=${setSettings} jobs=${jobs} shifts=${shifts} setJobs=${setJobs} setShifts=${setShifts} payslips=${payslips} setPayslips=${setPayslips} expenses=${expenses} setExpenses=${setExpenses}/>`}
       </div>
