@@ -2959,6 +2959,17 @@ function unpaidNote(list) {
   return list.map(x=>'החזר "'+(x.desc||'הוצאה')+'" מ-'+x.date.slice(8,10)+'/'+x.date.slice(5,7)
     +' ('+Math.round(x.amount)+' ש"ח) לא שולם').join('\n');
 }
+// Notes hold two things: lines this app wrote about unpaid reimbursements, and
+// whatever the user typed. Only the first kind is ever rewritten — recognising
+// them by their exact shape is what keeps the user's own text safe.
+const AUTO_NOTE_RE=/^החזר ".*" מ-\d{2}\/\d{2} \(\d+ ש"ח\) לא שולם$/;
+function manualPart(text) {
+  return String(text||'').split('\n').filter(l=>!AUTO_NOTE_RE.test(l.trim())).join('\n').trim();
+}
+// Rebuild the auto lines for the current ticks, keeping the typed text below them
+function composeNotes(text, unpaidList) {
+  return [unpaidNote(unpaidList), manualPart(text)].filter(Boolean).join('\n');
+}
 
 function PayslipsPage({payslips,setPayslips,setShifts,jobs,setTab,settings,expenses,setExpenses}) {
   const activeJobs=(jobs||[]).filter(j=>!j.deleted);
@@ -2990,18 +3001,15 @@ function PayslipsPage({payslips,setPayslips,setShifts,jobs,setTab,settings,expen
       .filter(x=>x.date.slice(0,7)===month&&(!jobId||!x.jobId||x.jobId===jobId))
       .sort((a,b)=>a.date<b.date?-1:1)
   ,[expenses,month,jobId]);
-  // A different month or job means a different list — old ticks no longer apply
-  useEffect(()=>{ setUnpaid(new Set()); setNotesTouched(false); },[month,jobId]);
-  const toggleUnpaid=id=>setUnpaid(p=>{const n=new Set(p); n.has(id)?n.delete(id):n.add(id); return n;});
+  // A different month or job means a different list — drop the ticks and the
+  // lines that described them, but never the user's own text
+  useEffect(()=>{ setUnpaid(new Set()); setNotes(n=>manualPart(n)); },[month,jobId]);
+  const toggleUnpaid=id=>{
+    const n=new Set(unpaid); n.has(id)?n.delete(id):n.add(id);
+    setUnpaid(n);
+    setNotes(cur=>composeNotes(cur,monthExpenses.filter(x=>n.has(x.id))));
+  };
   const reimbursedNow=monthExpenses.filter(x=>!unpaid.has(x.id));
-
-  // Keep the notes describing what was left unpaid, until the text is edited by
-  // hand — after that it belongs to the user and is never overwritten
-  const [notesTouched,setNotesTouched]=useState(false);
-  useEffect(()=>{
-    if(!notesTouched) setNotes(unpaidNote(monthExpenses.filter(x=>unpaid.has(x.id))));
-  },[unpaid,monthExpenses,notesTouched]);
-  const onNotes=v=>{ setNotes(v); setNotesTouched(v.trim()!==''); };
 
   // ── Editing an already-filed payslip ──
   const [editId,setEditId]=useState(null);
@@ -3019,7 +3027,11 @@ function PayslipsPage({payslips,setPayslips,setShifts,jobs,setTab,settings,expen
   // Filing a second payslip over a month that already has one is usually a slip
   // of the month picker, so say so before the upload rather than after
   const already=payslips.filter(p=>p.month===month&&(!jobId||!p.jobId||p.jobId===jobId));
-  const toggleEditUnpaid=id=>setEditUnpaid(p=>{const n=new Set(p); n.has(id)?n.delete(id):n.add(id); return n;});
+  const toggleEditUnpaid=id=>{
+    const n=new Set(editUnpaid); n.has(id)?n.delete(id):n.add(id);
+    setEditUnpaid(n);
+    setEditNotes(cur=>composeNotes(cur,editExpenses.filter(x=>n.has(x.id))));
+  };
   const saveEdit=()=>{
     const ids=new Set(editExpenses.map(x=>x.id));
     const stillOwed=[...editUnpaid].filter(id=>ids.has(id));
@@ -3131,10 +3143,11 @@ function PayslipsPage({payslips,setPayslips,setShifts,jobs,setTab,settings,expen
           <${ExpenseSettleList} items=${monthExpenses} unpaid=${unpaid} onToggle=${toggleUnpaid}/>`}
         <div>
           <label class="block text-xs font-medium text-gray-500 mb-1">הערות (לא חובה)</label>
-          <textarea value=${notes} onInput=${e=>onNotes(e.target.value)} rows="2"
-            placeholder="למשל: החזר הדלק לא נכלל, יגיע בתלוש הבא"
+          <textarea value=${notes} onInput=${e=>setNotes(e.target.value)} rows="2"
+            placeholder="למשל: סוכם עם המנהל שיגיע בתלוש הבא"
             class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm resize-y focus:outline-none focus:ring-2 focus:ring-blue-300"></textarea>
-          ${!notesTouched&&notes&&html`<div class="text-[11px] text-gray-400 mt-1">נכתב אוטומטית — אפשר לערוך</div>`}
+          ${unpaid.size>0&&html`<div class="text-[11px] text-gray-400 mt-1">
+            שורות ההחזרים נכתבות ונמחקות לבד לפי הסימון · מה שתכתוב בעצמך יישאר</div>`}
         </div>
         <label class="block border-2 border-dashed border-gray-200 rounded-xl p-5 text-center cursor-pointer hover:border-blue-300 hover:bg-blue-50 transition-colors">
           <div class=${'flex justify-center mb-2 '+(file?'text-emerald-500':'text-gray-300')}><${Icon} name=${file?'check':'upload'} size=${30}/></div>
@@ -3217,15 +3230,8 @@ function PayslipsPage({payslips,setPayslips,setShifts,jobs,setTab,settings,expen
             <textarea value=${editNotes} onInput=${e=>setEditNotes(e.target.value)} rows="3"
               placeholder="למשל: החזר הדלק לא נכלל, יגיע בתלוש הבא"
               class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm resize-y focus:outline-none focus:ring-2 focus:ring-blue-300"></textarea>
-            ${(()=>{
-              // Offered whenever the text disagrees with the ticks — including
-              // when nothing is ticked any more and the note still says otherwise
-              const auto=unpaidNote(editExpenses.filter(x=>editUnpaid.has(x.id)));
-              if(editExpenses.length===0||editNotes.trim()===auto.trim()) return null;
-              return html`<button onClick=${()=>setEditNotes(auto)}
-                class="mt-1 text-[11px] text-blue-600 hover:underline">
-                ${auto?'עדכן את ההערות לפי הסימון':'נקה את ההערות (הכל סומן כשולם)'}</button>`;
-            })()}
+            ${editUnpaid.size>0&&html`<div class="text-[11px] text-gray-400 mt-1">
+              שורות ההחזרים נכתבות ונמחקות לבד לפי הסימון · מה שתכתוב בעצמך יישאר</div>`}
           </div>
           <div class="grid grid-cols-2 gap-2 pt-1">
             <button onClick=${saveEdit}
