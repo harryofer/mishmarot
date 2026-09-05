@@ -467,9 +467,12 @@ const html = htm.bind(h);
 
 // ── Constants ────────────────────────────────────────────────
 // Shown at the bottom of Settings so a deploy can be told apart from a stale
-// copy on the device. BUMP BOTH ON EVERY DEPLOY — that is the whole point of them.
-const APP_VERSION = '2.3';
-const APP_BUILD   = '2026-09-05';
+// copy on the device. BUMP ON EVERY DEPLOY — that is the whole point of it.
+//   major.minor, each 1-999
+//   major — a significant new capability (a new screen, a new thing the app can do)
+//   minor — everything else: fixes, tweaks, wording, small improvements
+// At minor 999 the next small change is major+1 and minor back to 1.
+const APP_VERSION = '2.4';
 
 const MONTHS = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
 const DAYS   = ['א׳','ב׳','ג׳','ד׳','ה׳','ו׳','ש׳'];
@@ -3560,7 +3563,7 @@ function SettingsPage({settings,setSettings,jobs,shifts,setJobs,setShifts,paysli
     </div>
 
     <div class="text-center text-[11px] text-gray-400 pb-2">
-      גרסה ${APP_VERSION} · ${(()=>{const p=APP_BUILD.split('-');return p[2]+'.'+p[1]+'.'+p[0];})()}
+      גרסה ${APP_VERSION}
     </div>
   </div>`;
 }
