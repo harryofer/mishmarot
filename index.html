@@ -468,7 +468,7 @@ const html = htm.bind(h);
 // ── Constants ────────────────────────────────────────────────
 // Shown at the bottom of Settings so a deploy can be told apart from a stale
 // copy on the device. BUMP BOTH ON EVERY DEPLOY — that is the whole point of them.
-const APP_VERSION = '2.1';
+const APP_VERSION = '2.2';
 const APP_BUILD   = '2026-09-05';
 
 const MONTHS = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
@@ -2616,6 +2616,9 @@ function GoogleCalendarSection({jobs,shifts,setShifts,settings,setSettings}) {
   const [busy,  setBusy]  = useState(false);
   const [status,setStatus]= useState('');
   const [scope, setScope] = useState('month');
+  const [fromDate,setFromDate]=useState(todayS());
+  const [toDate,  setToDate]  =useState(todayS());
+  const [oneDate, setOneDate] =useState(todayS());
 
   const rem=(settings&&settings.gcalReminders)||{};
   const setRem=(k,v)=>setSettings(s=>({...s,gcalReminders:{dayBefore:true,atStart:true,...(s.gcalReminders||{}),[k]:v}}));
@@ -2659,12 +2662,22 @@ function GoogleCalendarSection({jobs,shifts,setShifts,settings,setSettings}) {
     if(!_gToken){ alert('התחבר תחילה ל-Google בכרטיס "גיבוי Google Drive" למעלה'); return; }
     const now=new Date(), y=now.getFullYear(), m=now.getMonth();
     let list, rMin, rMax;
+    // Exclusive upper bound: midnight at the start of the day after the last one
+    const dayAfter=d=>{const x=new Date(d+'T00:00:00'); x.setDate(x.getDate()+1); return x.toISOString();};
     if(scope==='month'){
       list=shifts.filter(s=>{const[a,b]=s.date.split('-').map(Number);return a===y&&b===m+1;});
       rMin=new Date(y,m,1).toISOString(); rMax=new Date(y,m+1,1).toISOString();
     } else if(scope==='future'){
       list=shifts.filter(s=>s.date>=todayS());
       rMin=new Date(todayS()+'T00:00:00').toISOString(); rMax=new Date(Date.now()+2*365*864e5).toISOString();
+    } else if(scope==='range'){
+      // Tolerate the dates being picked in either order
+      const a=fromDate<toDate?fromDate:toDate, b=fromDate<toDate?toDate:fromDate;
+      list=shifts.filter(s=>s.date>=a&&s.date<=b);
+      rMin=new Date(a+'T00:00:00').toISOString(); rMax=dayAfter(b);
+    } else if(scope==='day'){
+      list=shifts.filter(s=>s.date===oneDate);
+      rMin=new Date(oneDate+'T00:00:00').toISOString(); rMax=dayAfter(oneDate);
     } else {
       list=shifts.slice();
       rMin=new Date(Date.now()-3*365*864e5).toISOString(); rMax=new Date(Date.now()+2*365*864e5).toISOString();
@@ -2719,8 +2732,41 @@ function GoogleCalendarSection({jobs,shifts,setShifts,settings,setSettings}) {
         class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
         <option value="month">החודש הנוכחי</option>
         <option value="future">מהיום והלאה</option>
+        <option value="range">טווח תאריכים שאבחר</option>
+        <option value="day">יום מסוים</option>
         <option value="all">כל המשמרות</option>
       </select>
+      ${scope==='range'&&html`
+        <div class="grid grid-cols-2 gap-2 mt-2">
+          <div>
+            <span class="block text-xs text-gray-400 mb-1">מתאריך</span>
+            <input type="date" value=${fromDate} onChange=${e=>setFromDate(e.target.value)}
+              class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
+          </div>
+          <div>
+            <span class="block text-xs text-gray-400 mb-1">עד תאריך</span>
+            <input type="date" value=${toDate} onChange=${e=>setToDate(e.target.value)}
+              class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
+          </div>
+        </div>`}
+      ${scope==='day'&&html`
+        <div class="mt-2">
+          <span class="block text-xs text-gray-400 mb-1">תאריך</span>
+          <input type="date" value=${oneDate} onChange=${e=>setOneDate(e.target.value)}
+            class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
+        </div>`}
+      ${(()=>{
+        // Say up front how many shifts this will touch — the sync also deletes
+        // stray events inside the range, so the range is worth being sure about
+        const n=scope==='range'
+          ? shifts.filter(s=>{const a=fromDate<toDate?fromDate:toDate,b=fromDate<toDate?toDate:fromDate;return s.date>=a&&s.date<=b;}).length
+          : scope==='day' ? shifts.filter(s=>s.date===oneDate).length : null;
+        if(n===null) return null;
+        return html`<div class="text-[11px] text-gray-400 mt-1.5">
+          ${n===0?'אין משמרות בטווח הזה — אירועי עבודה שנותרו ביומן בטווח יימחקו'
+                 :(n===1?'משמרת אחת תסונכרן':n+' משמרות יסונכרנו')}
+        </div>`;
+      })()}
     </div>
     <button onClick=${sync} disabled=${busy}
       class="w-full bg-red-500 text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-red-600 disabled:opacity-50 transition-colors">
