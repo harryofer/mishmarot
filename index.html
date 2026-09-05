@@ -466,6 +466,11 @@ const { useState, useEffect, useMemo, useCallback, useRef } = preactHooks;
 const html = htm.bind(h);
 
 // ── Constants ────────────────────────────────────────────────
+// Shown at the bottom of Settings so a deploy can be told apart from a stale
+// copy on the device. BUMP BOTH ON EVERY DEPLOY — that is the whole point of them.
+const APP_VERSION = '2.1';
+const APP_BUILD   = '2026-09-05';
+
 const MONTHS = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
 const DAYS   = ['א׳','ב׳','ג׳','ד׳','ה׳','ו׳','ש׳'];
 // Soft but saturated — every hue is distinct at swatch size, so no two jobs
@@ -3489,6 +3494,10 @@ function SettingsPage({settings,setSettings,jobs,shifts,setJobs,setShifts,paysli
 
     <div class="text-center text-xs text-gray-400 py-2 leading-5">
       הנתונים שמורים במכשיר וב-Google Drive.<br/>חישובי המס הם הערכות ואינם מהווים ייעוץ מקצועי.
+    </div>
+
+    <div class="text-center text-[11px] text-gray-400 pb-2">
+      גרסה ${APP_VERSION} · ${(()=>{const p=APP_BUILD.split('-');return p[2]+'.'+p[1]+'.'+p[0];})()}
     </div>
   </div>`;
 }
