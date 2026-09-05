@@ -468,7 +468,7 @@ const html = htm.bind(h);
 // ── Constants ────────────────────────────────────────────────
 // Shown at the bottom of Settings so a deploy can be told apart from a stale
 // copy on the device. BUMP BOTH ON EVERY DEPLOY — that is the whole point of them.
-const APP_VERSION = '2.2';
+const APP_VERSION = '2.3';
 const APP_BUILD   = '2026-09-05';
 
 const MONTHS = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
@@ -1207,7 +1207,9 @@ function ShiftForm({initial, jobs, shifts, onSave, onClose, onDelete}) {
 }
 
 // ── CalendarView ─────────────────────────────────────────────
-function CalendarView({year,month,shifts,jobs,onDayClick,onShiftClick,onRangeSelect}) {
+// `selected` (optional Set of dates) keeps a committed choice highlighted after
+// the drag ends — the drag's own highlight takes over while one is in progress
+function CalendarView({year,month,shifts,jobs,onDayClick,onShiftClick,onRangeSelect,selected}) {
   const days=mDays(year,month), first=new Date(year,month,1).getDay(), today=todayS();
   const [dragStart,setDragStart]=useState(null);
   const [dragEnd,  setDragEnd]  =useState(null);
@@ -1276,7 +1278,8 @@ function CalendarView({year,month,shifts,jobs,onDayClick,onShiftClick,onRangeSel
       ${cells.map((day,i)=>{
         if(!day) return html`<div key=${'e'+i}/>`;
         const ds=`${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
-        const ds2=byDay[day]||[], isT=ds===today, isPast=ds<today, inDrag=selSet.has(ds);
+        const ds2=byDay[day]||[], isT=ds===today, isPast=ds<today;
+        const inDrag=selSet.size?selSet.has(ds):!!(selected&&selected.has(ds));
         // A past shift you never confirmed arriving at
         const unconfirmed = ds<=today && ds2.length>0 && ds2.some(s=>!s.arrived);
         const cls='min-h-[4rem] rounded-lg p-1 cursor-pointer border transition-colors select-none '+
@@ -2616,9 +2619,20 @@ function GoogleCalendarSection({jobs,shifts,setShifts,settings,setSettings}) {
   const [busy,  setBusy]  = useState(false);
   const [status,setStatus]= useState('');
   const [scope, setScope] = useState('month');
-  const [fromDate,setFromDate]=useState(todayS());
-  const [toDate,  setToDate]  =useState(todayS());
-  const [oneDate, setOneDate] =useState(todayS());
+  // Custom pick: one day when both ends match, a span otherwise
+  const [pickFrom,setPickFrom]=useState(todayS());
+  const [pickTo,  setPickTo]  =useState(todayS());
+  const [pickOpen,setPickOpen]=useState(false);
+  const now0=new Date();
+  const [pickYear, setPickYear] =useState(now0.getFullYear());
+  const [pickMonth,setPickMonth]=useState(now0.getMonth());
+  const pickedSet=useMemo(()=>new Set(dateRange(pickFrom,pickTo)),[pickFrom,pickTo]);
+  const monthShifts=useMemo(()=>shifts.filter(s=>{
+    const [y,m]=s.date.split('-').map(Number); return y===pickYear&&m===pickMonth+1;
+  }),[shifts,pickYear,pickMonth]);
+  const pickedCount=shifts.filter(s=>pickedSet.has(s.date)).length;
+  const dm=d=>d.slice(8,10)+'/'+d.slice(5,7);
+  const pickLabel=pickFrom===pickTo?dm(pickFrom):dm(pickFrom)+' – '+dm(pickTo);
 
   const rem=(settings&&settings.gcalReminders)||{};
   const setRem=(k,v)=>setSettings(s=>({...s,gcalReminders:{dayBefore:true,atStart:true,...(s.gcalReminders||{}),[k]:v}}));
@@ -2670,14 +2684,11 @@ function GoogleCalendarSection({jobs,shifts,setShifts,settings,setSettings}) {
     } else if(scope==='future'){
       list=shifts.filter(s=>s.date>=todayS());
       rMin=new Date(todayS()+'T00:00:00').toISOString(); rMax=new Date(Date.now()+2*365*864e5).toISOString();
-    } else if(scope==='range'){
-      // Tolerate the dates being picked in either order
-      const a=fromDate<toDate?fromDate:toDate, b=fromDate<toDate?toDate:fromDate;
+    } else if(scope==='custom'){
+      // Tolerate the ends arriving in either order
+      const a=pickFrom<pickTo?pickFrom:pickTo, b=pickFrom<pickTo?pickTo:pickFrom;
       list=shifts.filter(s=>s.date>=a&&s.date<=b);
       rMin=new Date(a+'T00:00:00').toISOString(); rMax=dayAfter(b);
-    } else if(scope==='day'){
-      list=shifts.filter(s=>s.date===oneDate);
-      rMin=new Date(oneDate+'T00:00:00').toISOString(); rMax=dayAfter(oneDate);
     } else {
       list=shifts.slice();
       rMin=new Date(Date.now()-3*365*864e5).toISOString(); rMax=new Date(Date.now()+2*365*864e5).toISOString();
@@ -2728,46 +2739,52 @@ function GoogleCalendarSection({jobs,shifts,setShifts,settings,setSettings}) {
     </div>
     <div>
       <label class="block text-sm font-medium text-gray-700 mb-1">טווח לסנכרון</label>
-      <select value=${scope} onChange=${e=>setScope(e.target.value)}
+      <select value=${scope}
+        onChange=${e=>{ const v=e.target.value; setScope(v); if(v==='custom') setPickOpen(true); }}
         class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
         <option value="month">החודש הנוכחי</option>
         <option value="future">מהיום והלאה</option>
-        <option value="range">טווח תאריכים שאבחר</option>
-        <option value="day">יום מסוים</option>
+        <option value="custom">בחירה אישית מהלוח</option>
         <option value="all">כל המשמרות</option>
       </select>
-      ${scope==='range'&&html`
-        <div class="grid grid-cols-2 gap-2 mt-2">
-          <div>
-            <span class="block text-xs text-gray-400 mb-1">מתאריך</span>
-            <input type="date" value=${fromDate} onChange=${e=>setFromDate(e.target.value)}
-              class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
+      ${scope==='custom'&&html`
+        <div class="mt-2 rounded-lg border border-gray-200 p-2.5 flex items-center gap-2">
+          <span class="text-blue-500 flex-shrink-0"><${Icon} name="calendar" size=${16}/></span>
+          <div class="flex-1 min-w-0">
+            <div class="text-sm font-semibold text-gray-700">${pickLabel}</div>
+            <div class="text-[11px] text-gray-400">
+              ${pickedCount===0?'אין משמרות בבחירה — אירועי עבודה שנותרו ביומן יימחקו'
+                :(pickedCount===1?'משמרת אחת תסונכרן':pickedCount+' משמרות יסונכרנו')}
+            </div>
           </div>
-          <div>
-            <span class="block text-xs text-gray-400 mb-1">עד תאריך</span>
-            <input type="date" value=${toDate} onChange=${e=>setToDate(e.target.value)}
-              class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
-          </div>
+          <button onClick=${()=>setPickOpen(true)}
+            class="flex-shrink-0 text-xs bg-blue-50 text-blue-600 rounded-lg px-3 py-1.5 font-semibold hover:bg-blue-100">
+            שנה בחירה</button>
         </div>`}
-      ${scope==='day'&&html`
-        <div class="mt-2">
-          <span class="block text-xs text-gray-400 mb-1">תאריך</span>
-          <input type="date" value=${oneDate} onChange=${e=>setOneDate(e.target.value)}
-            class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
-        </div>`}
-      ${(()=>{
-        // Say up front how many shifts this will touch — the sync also deletes
-        // stray events inside the range, so the range is worth being sure about
-        const n=scope==='range'
-          ? shifts.filter(s=>{const a=fromDate<toDate?fromDate:toDate,b=fromDate<toDate?toDate:fromDate;return s.date>=a&&s.date<=b;}).length
-          : scope==='day' ? shifts.filter(s=>s.date===oneDate).length : null;
-        if(n===null) return null;
-        return html`<div class="text-[11px] text-gray-400 mt-1.5">
-          ${n===0?'אין משמרות בטווח הזה — אירועי עבודה שנותרו ביומן בטווח יימחקו'
-                 :(n===1?'משמרת אחת תסונכרן':n+' משמרות יסונכרנו')}
-        </div>`;
-      })()}
     </div>
+
+    ${pickOpen&&html`
+      <${Modal} title="בחירת תאריכים לסנכרון" onClose=${()=>setPickOpen(false)}>
+        <div class="space-y-3">
+          <p class="text-xs text-gray-500 leading-5">
+            הקש על יום לבחירת יום בודד, או לחץ ארוך וגרור על פני כמה ימים כדי לבחור טווח.
+          </p>
+          <${MonthNav} year=${pickYear} month=${pickMonth}
+            onChange=${(y,m)=>{setPickYear(y);setPickMonth(m);}}/>
+          <${CalendarView} year=${pickYear} month=${pickMonth} shifts=${monthShifts} jobs=${jobs}
+            selected=${pickedSet}
+            onDayClick=${ds=>{ setPickFrom(ds); setPickTo(ds); }}
+            onShiftClick=${s=>{ setPickFrom(s.date); setPickTo(s.date); }}
+            onRangeSelect=${(a,b)=>{ setPickFrom(a<b?a:b); setPickTo(a<b?b:a); }}/>
+          <div class="bg-slate-50 rounded-lg px-3 py-2 text-xs text-gray-600">
+            נבחר: <span class="font-semibold text-gray-800">${pickLabel}</span>
+            ${pickFrom!==pickTo?' · '+dateRange(pickFrom,pickTo).length+' ימים':''}
+            <span class="text-gray-400"> · ${pickedCount===1?'משמרת אחת':pickedCount+' משמרות'}</span>
+          </div>
+          <button onClick=${()=>setPickOpen(false)}
+            class="w-full bg-blue-500 text-white py-2 rounded-lg text-sm font-semibold hover:bg-blue-600">אישור</button>
+        </div>
+      <//>`}
     <button onClick=${sync} disabled=${busy}
       class="w-full bg-red-500 text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-red-600 disabled:opacity-50 transition-colors">
       ${busy?'...':html`<${Icon} name="calendar" size=${14}/> סנכרן ליומן Google`}</button>
