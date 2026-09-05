@@ -472,7 +472,7 @@ const html = htm.bind(h);
 //   major — a significant new capability (a new screen, a new thing the app can do)
 //   minor — everything else: fixes, tweaks, wording, small improvements
 // At minor 999 the next small change is major+1 and minor back to 1.
-const APP_VERSION = '2.5';
+const APP_VERSION = '2.6';
 
 const MONTHS = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
 const DAYS   = ['א׳','ב׳','ג׳','ד׳','ה׳','ו׳','ש׳'];
@@ -3042,7 +3042,21 @@ function composeNotes(text, unpaidList) {
   return [unpaidNote(unpaidList), manualPart(text)].filter(Boolean).join('\n');
 }
 
-function PayslipsPage({payslips,setPayslips,setShifts,jobs,setTab,settings,expenses,setExpenses}) {
+// What a payslip claims to have settled. Newer payslips record it outright;
+// older ones predate the fields, so their scope is derived the same way the
+// upload derived it at the time.
+function slipScope(p, shifts, expenses) {
+  const inScope=x=>x.date.slice(0,7)===p.month&&(!p.jobId||!x.jobId||x.jobId===p.jobId);
+  const unpaid=new Set(p.unpaidExpenseIds||[]);
+  return {
+    expenseIds: p.settledExpenseIds
+      || (expenses||[]).filter(x=>inScope(x)&&!unpaid.has(x.id)).map(x=>x.id),
+    shiftIds: p.paidShiftIds
+      || (shifts||[]).filter(s=>s.date.slice(0,7)===p.month&&(!p.jobId||s.jobId===p.jobId)).map(s=>s.id)
+  };
+}
+
+function PayslipsPage({payslips,setPayslips,shifts,setShifts,jobs,setTab,settings,expenses,setExpenses}) {
   const activeJobs=(jobs||[]).filter(j=>!j.deleted);
   const [token, setToken] = useState(()=>_gToken);
   // Salary for a month arrives the next one (the 1st or the 10th), so the month
@@ -3109,7 +3123,8 @@ function PayslipsPage({payslips,setPayslips,setShifts,jobs,setTab,settings,expen
     if(setExpenses&&ids.size)
       setExpenses(list=>list.map(x=>ids.has(x.id)?{...x,reimbursed:!editUnpaid.has(x.id)}:x));
     setPayslips(list=>list.map(p=>p.id===editId
-      ? {...p,notes:editNotes.trim(),unpaidExpenseIds:stillOwed}
+      ? {...p,notes:editNotes.trim(),unpaidExpenseIds:stillOwed,
+         settledExpenseIds:editExpenses.filter(x=>!editUnpaid.has(x.id)).map(x=>x.id)}
       : p));
     setEditId(null);
   };
@@ -3128,9 +3143,14 @@ function PayslipsPage({payslips,setPayslips,setShifts,jobs,setTab,settings,expen
       const res=await uploadFileToDrive(file,meta);
       const link=safeUrl(res.webViewLink)||('https://drive.google.com/file/d/'+encodeURIComponent(res.id)+'/view');
       const notPaid=monthExpenses.filter(x=>unpaid.has(x.id)).map(x=>x.id);
+      // Recorded so deleting this payslip can put back exactly what it settled
+      const settledIds=reimbursedNow.map(x=>x.id);
+      const paidShiftIds=(shifts||[])
+        .filter(s=>s.date.slice(0,7)===month&&(!jobId||s.jobId===jobId)).map(s=>s.id);
       setPayslips(list=>[...list,{id:genId(),month,jobId:jobId||null,name:file.name,
         driveFileId:res.id,driveLink:link,uploadedAt:new Date().toISOString(),
-        notes:notes.trim(),unpaidExpenseIds:notPaid}]);
+        notes:notes.trim(),unpaidExpenseIds:notPaid,
+        settledExpenseIds:settledIds,paidShiftIds}]);
       // Mark that month's shifts as paid — only for the linked job (or all if none chosen)
       setShifts&&setShifts(arr=>arr.map(s=>(s.date.slice(0,7)===month&&(!jobId||s.jobId===jobId))?{...s,isPaid:true}:s));
       // The payslip is also the reimbursement, so the same month's expenses are
@@ -3149,9 +3169,37 @@ function PayslipsPage({payslips,setPayslips,setShifts,jobs,setTab,settings,expen
   };
 
   const del = async (p) => {
-    if(!confirm('למחוק תלוש זה?')) return;
+    // Uploading marked this month's expenses reimbursed and its shifts paid, so
+    // deleting has to put them back — otherwise the money still reads as
+    // received with nothing behind it. Anything a remaining payslip also claims
+    // stays as it is.
+    const mine=slipScope(p,shifts,expenses);
+    const others=payslips.filter(x=>x.id!==p.id).map(x=>slipScope(x,shifts,expenses));
+    const heldElsewhere=key=>new Set(others.flatMap(o=>o[key]));
+    const keepExp=heldElsewhere('expenseIds'), keepShf=heldElsewhere('shiftIds');
+    const revertExp=mine.expenseIds.filter(id=>!keepExp.has(id)
+      &&(expenses||[]).some(x=>x.id===id&&x.reimbursed));
+    const revertShf=mine.shiftIds.filter(id=>!keepShf.has(id)
+      &&(shifts||[]).some(s=>s.id===id&&s.isPaid));
+
+    const parts=[];
+    if(revertExp.length) parts.push(revertExp.length===1?'החזר הוצאה אחד':revertExp.length+' החזרי הוצאות');
+    if(revertShf.length) parts.push(revertShf.length===1?'משמרת אחת':revertShf.length+' משמרות');
+    const msg='למחוק תלוש זה?'+(parts.length
+      ? '\n\n'+parts.join(' ו')+' שסומנו על ידו יחזרו לממתינים לתשלום.'
+      : '');
+    if(!confirm(msg)) return;
+
     await deleteDriveFile(p.driveFileId);
     setPayslips(list=>list.filter(x=>x.id!==p.id));
+    if(revertExp.length&&setExpenses){
+      const s=new Set(revertExp);
+      setExpenses(list=>list.map(x=>s.has(x.id)?{...x,reimbursed:false}:x));
+    }
+    if(revertShf.length&&setShifts){
+      const s=new Set(revertShf);
+      setShifts(list=>list.map(x=>s.has(x.id)?{...x,isPaid:false}:x));
+    }
   };
 
   const grouped = useMemo(()=>{
@@ -3740,7 +3788,7 @@ function App() {
         ${tab==='dashboard'&&html`<${DashboardPage} shifts=${shifts} setShifts=${setShifts} jobs=${jobs} settings=${settings} payslips=${payslips} expenses=${expenses} setTab=${setTab}/>`}
         ${tab==='shifts'   &&html`<${ShiftsPage}    shifts=${shifts} setShifts=${setShifts} jobs=${jobs}/>`}
         ${tab==='jobs'     &&html`<${JobsPage}       jobs=${jobs}    setJobs=${setJobs} shifts=${shifts} setShifts=${setShifts}/>`}
-        ${tab==='payslips' &&html`<${PayslipsPage}   payslips=${payslips} setPayslips=${setPayslips} setShifts=${setShifts} jobs=${jobs} setTab=${setTab} settings=${settings} expenses=${expenses} setExpenses=${setExpenses}/>`}
+        ${tab==='payslips' &&html`<${PayslipsPage}   payslips=${payslips} setPayslips=${setPayslips} shifts=${shifts} setShifts=${setShifts} jobs=${jobs} setTab=${setTab} settings=${settings} expenses=${expenses} setExpenses=${setExpenses}/>`}
         ${tab==='expenses' &&html`<${ExpensesPage}   expenses=${expenses} setExpenses=${setExpenses} jobs=${jobs} setTab=${setTab} settings=${settings}/>`}
         ${tab==='settings' &&html`<${SettingsPage}   settings=${settings} setSettings=${setSettings} jobs=${jobs} shifts=${shifts} setJobs=${setJobs} setShifts=${setShifts} payslips=${payslips} setPayslips=${setPayslips} expenses=${expenses} setExpenses=${setExpenses}/>`}
       </div>
