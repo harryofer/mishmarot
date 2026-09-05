@@ -472,7 +472,7 @@ const html = htm.bind(h);
 //   major — a significant new capability (a new screen, a new thing the app can do)
 //   minor — everything else: fixes, tweaks, wording, small improvements
 // At minor 999 the next small change is major+1 and minor back to 1.
-const APP_VERSION = '2.4';
+const APP_VERSION = '2.5';
 
 const MONTHS = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
 const DAYS   = ['א׳','ב׳','ג׳','ד׳','ה׳','ו׳','ש׳'];
@@ -2772,7 +2772,7 @@ function GoogleCalendarSection({jobs,shifts,setShifts,settings,setSettings}) {
           <p class="text-xs text-gray-500 leading-5">
             הקש על יום לבחירת יום בודד, או לחץ ארוך וגרור על פני כמה ימים כדי לבחור טווח.
           </p>
-          <${MonthNav} year=${pickYear} month=${pickMonth}
+          <${MonthStrip} year=${pickYear} month=${pickMonth}
             onChange=${(y,m)=>{setPickYear(y);setPickMonth(m);}}/>
           <${CalendarView} year=${pickYear} month=${pickMonth} shifts=${monthShifts} jobs=${jobs}
             selected=${pickedSet}
