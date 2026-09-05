@@ -126,6 +126,9 @@
     .dark body { background-color:#0E1621 !important; }
     .dark .bg-white  { background-color:#16202C !important; }
     .dark .bg-slate-50 { background-color:#0E1621 !important; }
+    /* Was never overridden, so every bg-gray-50 panel stayed a white box in dark
+       mode with light text on it — unreadable */
+    .dark .bg-gray-50 { background-color:#1B2532 !important; }
     .dark .bg-gray-50\/40 { background-color:rgba(15,23,42,.5) !important; }
     .dark .border-gray-100 { border-color:#202B38 !important; }
     .dark .border-gray-200 { border-color:#354354 !important; }
@@ -2920,10 +2923,52 @@ function ExpensesPage({expenses,setExpenses,jobs,setTab,settings}) {
   </div>`;
 }
 
+// Shared by the upload form and by editing an already-filed payslip, so both
+// screens ask the same question in the same words
+function ExpenseSettleList({items,unpaid,onToggle}) {
+  const paid=items.filter(x=>!unpaid.has(x.id));
+  const paidSum=paid.reduce((n,x)=>n+(x.amount||0),0);
+  return html`
+    <div class="rounded-xl border border-amber-100 bg-amber-50/60 p-3 space-y-2">
+      <div class="text-xs font-semibold text-amber-800 flex items-center gap-1.5">
+        <${Icon} name="wallet" size=${14}/> החזר הוצאות לחודש זה
+      </div>
+      <div class="text-[11px] text-amber-700 leading-4">
+        התלוש מסמן את כל ההוצאות של החודש כהוחזרו. סמן כאן רק מה ש<b>לא</b> קיבלת בחזרה.
+      </div>
+      <div class="space-y-1 max-h-44 overflow-y-auto">
+        ${items.map(x=>html`
+          <label key=${x.id} class="flex items-center gap-2 cursor-pointer select-none text-[11px] bg-white rounded-lg px-2 py-1.5 border border-amber-100">
+            <input type="checkbox" checked=${unpaid.has(x.id)} onChange=${()=>onToggle(x.id)} class="w-3.5 h-3.5 rounded flex-shrink-0"/>
+            <span class=${'flex-1 min-w-0 truncate '+(unpaid.has(x.id)?'text-amber-700 font-medium':'text-gray-600')}>
+              ${x.date.slice(8,10)}/${x.date.slice(5,7)} · ${x.desc||'הוצאה'}
+            </span>
+            <span class=${'flex-shrink-0 '+(unpaid.has(x.id)?'text-amber-700':'text-gray-400')}>${fmt(x.amount)}</span>
+          </label>`)}
+      </div>
+      <div class="text-[11px] text-amber-800 border-t border-amber-100 pt-1.5">
+        ${unpaid.size===0
+          ? 'הכל יסומן כהוחזר — סה"כ '+fmt(paidSum)
+          : paid.length+' מתוך '+items.length+' יסומנו כהוחזרו ('+fmt(paidSum)+') · '+unpaid.size+' יישארו ממתינות'}
+      </div>
+    </div>`;
+}
+
+// The sentence written into the notes for each reimbursement that did not arrive
+function unpaidNote(list) {
+  return list.map(x=>'החזר "'+(x.desc||'הוצאה')+'" מ-'+x.date.slice(8,10)+'/'+x.date.slice(5,7)
+    +' ('+Math.round(x.amount)+' ש"ח) לא שולם').join('\n');
+}
+
 function PayslipsPage({payslips,setPayslips,setShifts,jobs,setTab,settings,expenses,setExpenses}) {
   const activeJobs=(jobs||[]).filter(j=>!j.deleted);
   const [token, setToken] = useState(()=>_gToken);
-  const [month, setMonth] = useState(()=>{const n=new Date();return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');});
+  // Salary for a month arrives the next one (the 1st or the 10th), so the month
+  // being filed is almost always the previous one
+  const [month, setMonth] = useState(()=>{
+    const n=new Date(); n.setDate(1); n.setMonth(n.getMonth()-1);
+    return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');
+  });
   const [jobId, setJobId] = useState((activeJobs[0]&&activeJobs[0].id)||'');
   const [file,  setFile]  = useState(null);
   const [busy,  setBusy]  = useState(false);
@@ -2946,10 +2991,45 @@ function PayslipsPage({payslips,setPayslips,setShifts,jobs,setTab,settings,expen
       .sort((a,b)=>a.date<b.date?-1:1)
   ,[expenses,month,jobId]);
   // A different month or job means a different list — old ticks no longer apply
-  useEffect(()=>{ setUnpaid(new Set()); },[month,jobId]);
+  useEffect(()=>{ setUnpaid(new Set()); setNotesTouched(false); },[month,jobId]);
   const toggleUnpaid=id=>setUnpaid(p=>{const n=new Set(p); n.has(id)?n.delete(id):n.add(id); return n;});
   const reimbursedNow=monthExpenses.filter(x=>!unpaid.has(x.id));
-  const reimbursedSum=reimbursedNow.reduce((n,x)=>n+(x.amount||0),0);
+
+  // Keep the notes describing what was left unpaid, until the text is edited by
+  // hand — after that it belongs to the user and is never overwritten
+  const [notesTouched,setNotesTouched]=useState(false);
+  useEffect(()=>{
+    if(!notesTouched) setNotes(unpaidNote(monthExpenses.filter(x=>unpaid.has(x.id))));
+  },[unpaid,monthExpenses,notesTouched]);
+  const onNotes=v=>{ setNotes(v); setNotesTouched(v.trim()!==''); };
+
+  // ── Editing an already-filed payslip ──
+  const [editId,setEditId]=useState(null);
+  const [editNotes,setEditNotes]=useState('');
+  const [editUnpaid,setEditUnpaid]=useState(()=>new Set());
+  const editSlip=editId?payslips.find(p=>p.id===editId):null;
+  const editExpenses=useMemo(()=>!editSlip?[]:(expenses||[])
+    .filter(x=>x.date.slice(0,7)===editSlip.month&&(!editSlip.jobId||!x.jobId||x.jobId===editSlip.jobId))
+    .sort((a,b)=>a.date<b.date?-1:1)
+  ,[expenses,editSlip]);
+  const startEdit=p=>{
+    setEditId(p.id); setEditNotes(p.notes||'');
+    setEditUnpaid(new Set(p.unpaidExpenseIds||[]));
+  };
+  // Filing a second payslip over a month that already has one is usually a slip
+  // of the month picker, so say so before the upload rather than after
+  const already=payslips.filter(p=>p.month===month&&(!jobId||!p.jobId||p.jobId===jobId));
+  const toggleEditUnpaid=id=>setEditUnpaid(p=>{const n=new Set(p); n.has(id)?n.delete(id):n.add(id); return n;});
+  const saveEdit=()=>{
+    const ids=new Set(editExpenses.map(x=>x.id));
+    const stillOwed=[...editUnpaid].filter(id=>ids.has(id));
+    if(setExpenses&&ids.size)
+      setExpenses(list=>list.map(x=>ids.has(x.id)?{...x,reimbursed:!editUnpaid.has(x.id)}:x));
+    setPayslips(list=>list.map(p=>p.id===editId
+      ? {...p,notes:editNotes.trim(),unpaidExpenseIds:stillOwed}
+      : p));
+    setEditId(null);
+  };
 
   const upload = async () => {
     if(!token) return alert('יש להתחבר לחשבון Google תחילה (בהגדרות)');
@@ -3048,40 +3128,28 @@ function PayslipsPage({payslips,setPayslips,setShifts,jobs,setTab,settings,expen
           </select>
         </div>`}
         ${monthExpenses.length>0&&html`
-          <div class="rounded-xl border border-amber-100 bg-amber-50/60 p-3 space-y-2">
-            <div class="text-xs font-semibold text-amber-800 flex items-center gap-1.5">
-              <${Icon} name="wallet" size=${14}/> החזר הוצאות לחודש זה
-            </div>
-            <div class="text-[11px] text-amber-700 leading-4">
-              התלוש מסמן את כל ההוצאות של החודש כהוחזרו. סמן כאן רק מה ש<b>לא</b> קיבלת בחזרה.
-            </div>
-            <div class="space-y-1 max-h-44 overflow-y-auto">
-              ${monthExpenses.map(x=>html`
-                <label key=${x.id} class="flex items-center gap-2 cursor-pointer select-none text-[11px] bg-white rounded-lg px-2 py-1.5 border border-amber-100">
-                  <input type="checkbox" checked=${unpaid.has(x.id)} onChange=${()=>toggleUnpaid(x.id)} class="w-3.5 h-3.5 rounded flex-shrink-0"/>
-                  <span class=${'flex-1 min-w-0 truncate '+(unpaid.has(x.id)?'text-amber-700 font-medium':'text-gray-600')}>
-                    ${x.date.slice(8,10)}/${x.date.slice(5,7)} · ${x.desc||'הוצאה'}
-                  </span>
-                  <span class=${'flex-shrink-0 '+(unpaid.has(x.id)?'text-amber-700':'text-gray-400')}>${fmt(x.amount)}</span>
-                </label>`)}
-            </div>
-            <div class="text-[11px] text-amber-800 border-t border-amber-100 pt-1.5">
-              ${unpaid.size===0
-                ? 'הכל יסומן כהוחזר — סה"כ '+fmt(reimbursedSum)
-                : reimbursedNow.length+' מתוך '+monthExpenses.length+' יסומנו כהוחזרו ('+fmt(reimbursedSum)+') · '+unpaid.size+' יישארו ממתינות'}
-            </div>
-          </div>`}
+          <${ExpenseSettleList} items=${monthExpenses} unpaid=${unpaid} onToggle=${toggleUnpaid}/>`}
         <div>
           <label class="block text-xs font-medium text-gray-500 mb-1">הערות (לא חובה)</label>
-          <textarea value=${notes} onInput=${e=>setNotes(e.target.value)} rows="2"
+          <textarea value=${notes} onInput=${e=>onNotes(e.target.value)} rows="2"
             placeholder="למשל: החזר הדלק לא נכלל, יגיע בתלוש הבא"
             class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm resize-y focus:outline-none focus:ring-2 focus:ring-blue-300"></textarea>
+          ${!notesTouched&&notes&&html`<div class="text-[11px] text-gray-400 mt-1">נכתב אוטומטית — אפשר לערוך</div>`}
         </div>
         <label class="block border-2 border-dashed border-gray-200 rounded-xl p-5 text-center cursor-pointer hover:border-blue-300 hover:bg-blue-50 transition-colors">
           <div class=${'flex justify-center mb-2 '+(file?'text-emerald-500':'text-gray-300')}><${Icon} name=${file?'check':'upload'} size=${30}/></div>
           <div class="text-sm text-gray-600 truncate px-2">${file?file.name:'לחץ לבחירת תמונה או PDF'}</div>
           <input type="file" accept="image/*,.pdf" onChange=${e=>setFile(e.target.files[0]||null)} class="hidden"/>
         </label>
+        ${already.length>0&&html`
+          <div class="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2 flex items-start gap-1.5">
+            <span class="flex-shrink-0 mt-0.5"><${Icon} name="bell" size=${13}/></span>
+            <span>
+              שים לב — כבר ${already.length===1?'קיים תלוש':'קיימים '+already.length+' תלושים'} לחודש זה
+              ${(()=>{const j=activeJobs.length>0&&jobId?findJob(jobs,jobId):null; return j?' עבור "'+j.name+'"':'';})()}.
+              אפשר להעלות עוד אחד, או לערוך את הקיים במקום.
+            </span>
+          </div>`}
         <button onClick=${upload} disabled=${busy||!file}
           class="hero-cta w-full disabled:opacity-40">
           ${busy?'מעלה...':html`<${Icon} name="upload" size=${14}/> העלה תלוש`}</button>
@@ -3114,6 +3182,8 @@ function PayslipsPage({payslips,setPayslips,setShifts,jobs,setTab,settings,expen
                   </div>
                   <a href=${safeUrl(p.driveLink)||'#'} target="_blank" rel="noopener noreferrer"
                     class="flex-shrink-0 bg-blue-50 text-blue-600 rounded-lg px-3 py-1.5 text-xs font-semibold hover:bg-blue-100 transition-colors flex items-center gap-1"><${Icon} name="eye" size=${13}/> צפה</a>
+                  <button onClick=${()=>startEdit(p)} title="ערוך הערות והחזרים"
+                    class="flex-shrink-0 p-1.5 rounded-lg hover:bg-blue-50 text-gray-400 hover:text-blue-500"><${Icon} name="pencil" size=${16}/></button>
                   <button onClick=${()=>del(p)} class="flex-shrink-0 p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500"><${Icon} name="trash" size=${16}/></button>
                 </div>
                 ${!!(p.notes||(p.unpaidExpenseIds&&p.unpaidExpenseIds.length))&&html`
@@ -3130,6 +3200,41 @@ function PayslipsPage({payslips,setPayslips,setShifts,jobs,setTab,settings,expen
             </div>`;})}
         </div>`)}
       </div>`}
+
+    ${editSlip&&html`
+      <${Modal} title="עריכת תלוש" onClose=${()=>setEditId(null)}>
+        <div class="space-y-3">
+          <div class="text-xs text-gray-500">
+            ${(()=>{const j=editSlip.jobId?findJob(jobs,editSlip.jobId):null;
+              const [y,mo]=editSlip.month.split('-').map(Number);
+              return (j?j.name+' · ':'')+MONTHS[mo-1]+' '+y;})()}
+          </div>
+          ${editExpenses.length>0
+            ? html`<${ExpenseSettleList} items=${editExpenses} unpaid=${editUnpaid} onToggle=${toggleEditUnpaid}/>`
+            : html`<div class="text-xs text-gray-400 bg-gray-50 rounded-lg px-3 py-2">אין הוצאות רשומות לחודש זה.</div>`}
+          <div>
+            <label class="block text-xs font-medium text-gray-500 mb-1">הערות</label>
+            <textarea value=${editNotes} onInput=${e=>setEditNotes(e.target.value)} rows="3"
+              placeholder="למשל: החזר הדלק לא נכלל, יגיע בתלוש הבא"
+              class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm resize-y focus:outline-none focus:ring-2 focus:ring-blue-300"></textarea>
+            ${(()=>{
+              // Offered whenever the text disagrees with the ticks — including
+              // when nothing is ticked any more and the note still says otherwise
+              const auto=unpaidNote(editExpenses.filter(x=>editUnpaid.has(x.id)));
+              if(editExpenses.length===0||editNotes.trim()===auto.trim()) return null;
+              return html`<button onClick=${()=>setEditNotes(auto)}
+                class="mt-1 text-[11px] text-blue-600 hover:underline">
+                ${auto?'עדכן את ההערות לפי הסימון':'נקה את ההערות (הכל סומן כשולם)'}</button>`;
+            })()}
+          </div>
+          <div class="grid grid-cols-2 gap-2 pt-1">
+            <button onClick=${saveEdit}
+              class="bg-blue-500 text-white py-2 rounded-lg text-sm font-semibold hover:bg-blue-600">שמור שינויים</button>
+            <button onClick=${()=>setEditId(null)}
+              class="bg-gray-100 text-gray-700 py-2 rounded-lg text-sm font-semibold hover:bg-gray-200">ביטול</button>
+          </div>
+        </div>
+      <//>`}
   </div>`;
 }
 
