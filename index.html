@@ -353,11 +353,17 @@
       border-radius:1.25rem; padding:1.5rem 1.25rem 1.25rem;
       box-shadow:var(--h-shadow);
     }
+    /* The glow layer is filtered, so the browser composites it as its own
+       texture — and its right edge used to sit at 90% of the hero, inside the
+       visible area, where that texture's boundary showed as a hairline running
+       the full height on some screen densities. Every edge now sits outside the
+       hero, so overflow:hidden clips them. The percentages are rescaled to the
+       wider box (115% -> 150% of the hero) to keep the glow exactly where it was. */
     .hero::before {
-      content:''; position:absolute; inset:-45% 10% auto -25%; height:210%;
+      content:''; position:absolute; inset:-45% -25% auto -25%; height:210%;
       background:
-        radial-gradient(38% 30% at 28% 22%, var(--h-glow), transparent 72%),
-        radial-gradient(70% 55% at 34% 30%, var(--h-glow), transparent 78%);
+        radial-gradient(29.13% 30% at 21.47% 22%, var(--h-glow), transparent 72%),
+        radial-gradient(53.67% 55% at 26.07% 30%, var(--h-glow), transparent 78%);
       filter:saturate(1.15); pointer-events:none;
     }
     .hero::after {
@@ -508,7 +514,7 @@ const html = htm.bind(h);
 //   major — a significant new capability (a new screen, a new thing the app can do)
 //   minor — everything else: fixes, tweaks, wording, small improvements
 // At minor 999 the next small change is major+1 and minor back to 1.
-const APP_VERSION = '3.4';
+const APP_VERSION = '3.5';
 
 const MONTHS = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
 const DAYS   = ['א׳','ב׳','ג׳','ד׳','ה׳','ו׳','ש׳'];
