@@ -514,7 +514,7 @@ const html = htm.bind(h);
 //   major — a significant new capability (a new screen, a new thing the app can do)
 //   minor — everything else: fixes, tweaks, wording, small improvements
 // At minor 999 the next small change is major+1 and minor back to 1.
-const APP_VERSION = '4.2';
+const APP_VERSION = '4.3';
 
 const MONTHS = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
 const DAYS   = ['א׳','ב׳','ג׳','ד׳','ה׳','ו׳','ש׳'];
@@ -725,6 +725,14 @@ function shiftMileage(s, jobs) {
 }
 // The kilometres recorded on a shift, whichever field version wrote them
 function shiftKm(s){ return +(s.km!=null?s.km:s.siteKm)||0; }
+// The kilometres actually being paid for. A one-way figure covers the way back
+// too, so a claim must name the full distance travelled, not the number typed.
+function shiftKmPaid(s, jobs){
+  const km=shiftKm(s); if(km<=0) return 0;
+  const j=findJob(jobs,s.jobId);
+  const doubled = s.kmRoundTrip==null ? (!j||j.kmRoundTrip!==false) : !!s.kmRoundTrip;
+  return Math.round(km*(doubled?2:1)*100)/100;
+}
 // What a shift is worth in total, so no caller has to remember the parts
 function shiftPay(s, jobs) {
   return s.earnings + shiftTravel(s,jobs) + shiftMileage(s,jobs) + (s.bonus||0);
@@ -2288,7 +2296,7 @@ function DashboardPage({shifts,setShifts,jobs,settings,payslips,expenses,setTab}
       const pay=shiftMileage(s,jobs);
       if(pay<=0||s.isPaid) return null;
       return {id:'km:'+s.id,date:s.date,amount:pay,jobId:s.jobId,fromShift:true,
-        desc:'החזר ק"מ · '+shiftKm(s)+' ק"מ'};
+        desc:'החזר ק"מ · '+shiftKmPaid(s,jobs)+' ק"מ'};
     }).filter(Boolean);
     let list=[...(expenses||[]).filter(x=>!x.reimbursed),...km];
     if(shareScope!=='all') list=list.filter(x=>x.date.slice(0,7)===shareScope);
@@ -3145,7 +3153,7 @@ function ExpensesPage({expenses,setExpenses,jobs,shifts,setTab,settings}) {
     .map(s=>{
       const pay=shiftMileage(s,jobs); if(pay<=0) return null;
       return {id:'km:'+s.id, date:s.date, amount:pay, jobId:s.jobId, fromShift:true,
-        reimbursed:!!s.isPaid, desc:'החזר ק"מ · '+shiftKm(s)+' ק"מ'};
+        reimbursed:!!s.isPaid, desc:'החזר ק"מ · '+shiftKmPaid(s,jobs)+' ק"מ'};
     }).filter(Boolean)
   ,[shifts,jobs]);
 
