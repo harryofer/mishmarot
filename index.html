@@ -414,6 +414,18 @@
     }
     .hero-forecast-val { color:var(--h-amount); font-weight:700; font-size:.9rem; font-variant-numeric:tabular-nums; }
     .hero-forecast-sub { color:var(--h-sub); font-size:.68rem; }
+    /* Splits the gross into wages and what rides alongside them */
+    .hero-split {
+      display:flex; align-items:center; gap:.4rem; flex-wrap:wrap;
+      margin-top:.55rem; font-size:.7rem; color:var(--h-sub);
+    }
+    .hero-split b { color:var(--h-stat); font-weight:700; font-size:.76rem; }
+    .hero-split-sep { opacity:.55; }
+    /* Separates the month's money above from today's actions below */
+    .hero-rule {
+      height:1px; margin:.85rem 0 .7rem;
+      background:var(--h-rule);
+    }
     /* One row inside the hero: car, kilometres, how they were counted, the sum.
        Sits under the "I arrived" button so the whole day is logged in one place. */
     .hero-km {
@@ -496,7 +508,7 @@ const html = htm.bind(h);
 //   major — a significant new capability (a new screen, a new thing the app can do)
 //   minor — everything else: fixes, tweaks, wording, small improvements
 // At minor 999 the next small change is major+1 and minor back to 1.
-const APP_VERSION = '3.3';
+const APP_VERSION = '3.4';
 
 const MONTHS = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
 const DAYS   = ['א׳','ב׳','ג׳','ד׳','ה׳','ו׳','ש׳'];
@@ -928,7 +940,7 @@ function useCountUp(target, active) {
 }
 
 // ── DashboardHero ────────────────────────────────────────────
-function DashboardHero({net,gross,deductions,daysWorked,monthLabel,allPaid,todayShifts,todayArrived,onToggleArrived,onAddShift,monthProgress,futureCount,forecastNet,forecastHours,km}) {
+function DashboardHero({net,gross,deductions,daysWorked,monthLabel,allPaid,todayShifts,todayArrived,onToggleArrived,onAddShift,monthProgress,futureCount,forecastNet,forecastHours,km,basePay,addOns}) {
   const animate = !_privacy;
   const shown = useCountUp(net, animate);
   const hasToday = todayShifts.length>0;
@@ -963,6 +975,13 @@ function DashboardHero({net,gross,deductions,daysWorked,monthLabel,allPaid,today
       </div>
     </div>
 
+    ${addOns>0&&html`
+      <div class="hero-split">
+        <span>שכר עבודה <b>${money(basePay)}</b></span>
+        <span class="hero-split-sep">+</span>
+        <span>נסיעות והחזרים <b>${money(addOns)}</b></span>
+      </div>`}
+
     <div class="mt-3 mb-3">
       <div class="flex items-center justify-between mb-1">
         <span class="hero-sub">${futureCount>0?'מהצפי החודשי':'מהחודש'}</span>
@@ -983,6 +1002,9 @@ function DashboardHero({net,gross,deductions,daysWorked,monthLabel,allPaid,today
           <span class="hero-forecast-sub">${futureCount} משמרות · ${forecastHours} שע'</span>
         </span>
       </div>`}
+
+    <!-- Everything above is the month's money; everything below is today's doing -->
+    <div class="hero-rule"></div>
 
     ${hasToday
       ? html`<button class=${'hero-cta'+(todayArrived?' done':'')} onClick=${onToggleArrived}>
@@ -2147,6 +2169,11 @@ function DashboardPage({shifts,setShifts,jobs,settings,payslips,expenses,setTab}
     const travelTotal=past.reduce((n,s)=>n+shiftTravel(s,jobs),0);
     const kmTotal=past.reduce((n,s)=>n+shiftMileage(s,jobs),0);
     const kmDays=past.filter(s=>shiftMileage(s,jobs)>0).length;
+    // Gross split into the work itself and everything paid alongside it, so the
+    // headline figure can say which part is actually wages
+    const basePay=past.reduce((n,s)=>n+s.earnings,0)+monthlyTotal;
+    const bonusTotal=past.reduce((n,s)=>n+(s.bonus||0),0);
+    const addOns=travelTotal+kmTotal+bonusTotal;
 
     // Pension base: only shifts/months where the job is pension-eligible on that date (3-month rule, or manual override)
     const pensionEarn=arr=>arr.reduce((n,s)=>{
@@ -2168,7 +2195,7 @@ function DashboardPage({shifts,setShifts,jobs,settings,payslips,expenses,setTab}
     // Add monthly rate to each monthly job's byJob entry
     monthlyJobIds.forEach(jid=>{ const j=findJob(jobs,jid); if(j&&byJob[jid]) byJob[jid].earn+=j.rate; });
     const hrs=ms.reduce((n,s)=>n+(s.hours||0),0);
-    return {ms,past,fut,gA,gF,paid,pend,travelTotal,kmTotal,kmDays,nA,nF,byJob,hrs,monthlyTotal};
+    return {ms,past,fut,gA,gF,paid,pend,travelTotal,kmTotal,kmDays,basePay,bonusTotal,addOns,nA,nF,byJob,hrs,monthlyTotal};
   },[shifts,jobs,year,month,settings.creditPoints,today]);
 
   const allPaid = d.past.length>0 && d.past.every(s=>s.isPaid);
@@ -2338,6 +2365,7 @@ function DashboardPage({shifts,setShifts,jobs,settings,payslips,expenses,setTab}
       daysWorked=${d.past.length} monthLabel=${MONTHS[month]} allPaid=${allPaid}
       todayShifts=${todayShifts} todayArrived=${todayArrived}
       onToggleArrived=${toggleArrivedToday}
+      basePay=${d.basePay} addOns=${d.addOns}
       km=${kmShift?{
         value:kmValue, mode:kmMode, pay:kmPreview,
         // Saved on every keystroke, not on blur: a field that is never left
