@@ -514,7 +514,7 @@ const html = htm.bind(h);
 //   major — a significant new capability (a new screen, a new thing the app can do)
 //   minor — everything else: fixes, tweaks, wording, small improvements
 // At minor 999 the next small change is major+1 and minor back to 1.
-const APP_VERSION = '3.7';
+const APP_VERSION = '4.1';
 
 const MONTHS = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
 const DAYS   = ['א׳','ב׳','ג׳','ד׳','ה׳','ו׳','ש׳'];
@@ -700,10 +700,12 @@ function onColor(hex) {
   const L=.2126*f(parseInt(h.slice(0,2),16))+.7152*f(parseInt(h.slice(2,4),16))+.0722*f(parseInt(h.slice(4,6),16));
   return ((L+.05)/.0605) > (1.05/(L+.05)) ? '#0B1017' : '#ffffff';
 }
-// Travel for a shift: its own value, or fall back to the job's per-day travel (so existing shifts pick it up)
+// Travel for a shift: its own value, or fall back to the job's per-day travel (so existing shifts pick it up).
+// A job paid a monthly pass carries nothing per shift — that amount is added once for the month.
 function shiftTravel(s, jobs) {
-  if (s.travel!=null && s.travel!==0) return s.travel;
   const j=findJob(jobs,s.jobId);
+  if (j && j.travelMode==='month') return 0;
+  if (s.travel!=null && s.travel!==0) return s.travel;
   return (j&&j.travelPerDay)||0;
 }
 
@@ -1057,6 +1059,9 @@ function JobForm({initial, shifts, jobs, onSave, onClose}) {
   const [jobStart,  setJobStart]  = useState((initial&&initial.startDate)||todayS());
   const [pensionMode,setPensionMode]=useState((initial&&initial.pensionMode)||'auto');
   const [travelDay, setTravelDay] = useState((initial&&initial.travelPerDay!=null)?String(initial.travelPerDay):'');
+  // 'day' = an amount per work day, 'month' = a monthly pass paid once a month
+  const [travelMode,setTravelMode] = useState((initial&&initial.travelMode)||'day');
+  const [travelMonth,setTravelMonth]=useState((initial&&initial.travelPerMonth!=null)?String(initial.travelPerMonth):'');
   // Own-car mileage, per job — off unless this job actually pays it
   const [kmEnabled, setKmEnabled] = useState(!!(initial&&initial.kmEnabled));
   const [kmRate,    setKmRate]    = useState((initial&&initial.kmRate!=null)?String(initial.kmRate):'1');
@@ -1080,7 +1085,8 @@ function JobForm({initial, shifts, jobs, onSave, onClose}) {
     }
     if (!rate||+rate<=0) return alert('יש להזין תעריף תקין');
     if (kmEnabled && !(+kmRate>0)) return alert('יש להזין תשלום לק"מ');
-    onSave({name:name.trim(),color,rateType:type,rate:+rate,startTime,endTime,hoursMode,startDate:jobStart,pensionMode,travelPerDay:+travelDay||0,
+    onSave({name:name.trim(),color,rateType:type,rate:+rate,startTime,endTime,hoursMode,startDate:jobStart,pensionMode,
+      travelMode,travelPerDay:+travelDay||0,travelPerMonth:+travelMonth||0,
       kmEnabled,kmRate:+kmRate||0,kmRoundTrip});
   };
   return html`<div class="space-y-4">
@@ -1166,10 +1172,24 @@ function JobForm({initial, shifts, jobs, onSave, onClose}) {
       ${pensionMode==='auto'&&html`<p class="text-xs text-gray-400 mt-1">לפי תאריך ההתחלה, ניכוי הפנסיה יתחיל מ־${pensionFrom}.</p>`}
     </div>`}
     ${type!=='miluim'&&html`<div>
-      <label class="block text-sm font-medium text-gray-700 mb-1">נסיעות ליום עבודה (₪)</label>
-      <input type="number" step="0.5" min="0" value=${travelDay} onInput=${e=>setTravelDay(e.target.value)} placeholder="0"
-        class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
-      <p class="text-xs text-gray-400 mt-1">יתווסף אוטומטית לכל משמרת (ניתן לשנות בכל משמרת). למשל 16.6 ₪ ליום.</p>
+      <label class="block text-sm font-medium text-gray-700 mb-1">החזר נסיעות</label>
+      <div class="flex gap-2 mb-2">
+        ${[['day','לפי יום עבודה'],['month','חופשי חודשי']].map(([v,l])=>html`
+          <button key=${v} onClick=${()=>setTravelMode(v)}
+            class=${'flex-1 py-2 rounded-lg text-xs font-medium transition-colors '+(travelMode===v?'bg-blue-500 text-white':'bg-gray-100 text-gray-600 hover:bg-gray-200')}>
+            ${l}</button>`)}
+      </div>
+      ${travelMode==='day'
+        ? html`
+          <input type="number" step="0.5" min="0" value=${travelDay} onInput=${e=>setTravelDay(e.target.value)} placeholder="0"
+            class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
+          <p class="text-xs text-gray-400 mt-1">₪ ליום עבודה — יתווסף אוטומטית לכל משמרת (ניתן לשנות בכל משמרת).</p>`
+        : html`
+          <input type="number" step="0.5" min="0" value=${travelMonth} onInput=${e=>setTravelMonth(e.target.value)} placeholder="0"
+            class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
+          <p class="text-xs text-gray-400 mt-1">
+            ₪ לחודש — מחיר החופשי חודשי. ישולם פעם אחת בכל חודש שעבדת בו, בלי קשר למספר הימים.
+          </p>`}
     </div>`}
     ${type!=='miluim'&&html`<div class="rounded-lg border border-gray-200 p-3 space-y-3">
       <label class="flex items-center justify-between cursor-pointer select-none">
@@ -1219,7 +1239,8 @@ function ShiftForm({initial, jobs, shifts, onSave, onClose, onDelete}) {
   const [date,   setDate]   = useState((initial&&initial.date)||todayS());
   const [startTime,setStartTime]=useState((initial&&initial.startTime)||(jobInit&&jobInit.startTime)||'08:00');
   const [endTime,  setEndTime]  =useState((initial&&initial.endTime)  ||(jobInit&&jobInit.endTime)  ||'16:00');
-  const [travel, setTravel] = useState(initial&&initial.travel!=null?initial.travel:((jobInit&&jobInit.travelPerDay)||0));
+  const jobTravel = j => (j && j.travelMode==='month') ? 0 : ((j&&j.travelPerDay)||0);
+  const [travel, setTravel] = useState(initial&&initial.travel!=null?initial.travel:jobTravel(jobInit));
   const [bonus,  setBonus]  = useState(initial&&initial.bonus!=null?initial.bonus:0);
   const [isPaid, setIsPaid] = useState(initial&&initial.isPaid!=null?initial.isPaid:false);
   const [arrived,setArrived]= useState(initial&&initial.arrived!=null?initial.arrived:false);
@@ -1237,7 +1258,7 @@ function ShiftForm({initial, jobs, shifts, onSave, onClose, onDelete}) {
   useEffect(()=>{
     if(firstRun.current){ firstRun.current=false; return; }
     const j=findJob(jobs,jobId);
-    if(j){ setStartTime(j.startTime||'08:00'); setEndTime(j.endTime||'16:00'); setTravel(j.travelPerDay||0); }
+    if(j){ setStartTime(j.startTime||'08:00'); setEndTime(j.endTime||'16:00'); setTravel(jobTravel(j)); }
   },[jobId]);
 
   const hours      = hoursBetween(startTime,endTime);
@@ -2149,7 +2170,8 @@ function DashboardPage({shifts,setShifts,jobs,settings,payslips,expenses,setTab}
   const today=todayS();
   const monthKey=year+'-'+String(month+1).padStart(2,'0');
   const monthPayslips=(payslips||[]).filter(p=>p.month===monthKey);
-  // Reimbursements are tracked apart from salary — they are not taxable income
+  // Reimbursements are paid through the payslip as a נסיעות line and taxed with
+  // everything else — confirmed against a real payslip — so they belong in gross
   const monthExpenses=(expenses||[]).filter(x=>x.date.slice(0,7)===monthKey);
   const expTotal=monthExpenses.reduce((n,x)=>n+(x.amount||0),0);
   const expPending=monthExpenses.filter(x=>!x.reimbursed).reduce((n,x)=>n+(x.amount||0),0);
@@ -2163,22 +2185,41 @@ function DashboardPage({shifts,setShifts,jobs,settings,payslips,expenses,setTab}
     ms.forEach(s=>{ const j=findJob(jobs,s.jobId); if(j&&j.rateType==='monthly') monthlyJobIds.add(s.jobId); });
     const monthlyTotal=Array.from(monthlyJobIds).reduce((n,jid)=>{const j=findJob(jobs,jid);return n+(j?j.rate:0);},0);
 
+    // A monthly travel allowance (a public-transport pass) is paid once for the
+    // month regardless of how many days were worked, so it is counted per job
+    // that has any shift — not per shift like the per-day allowance.
+    const travelMonthIds=arr=>{
+      const set=new Set();
+      arr.forEach(s=>{ const j=findJob(jobs,s.jobId); if(j&&j.travelMode==='month') set.add(s.jobId); });
+      return set;
+    };
+    const travelMonthSum=set=>Array.from(set)
+      .reduce((n,jid)=>{const j=findJob(jobs,jid);return n+(+(j&&j.travelPerMonth)||0);},0);
+    const monthTravelA=travelMonthSum(travelMonthIds(past));
+    const monthTravelF=travelMonthSum(travelMonthIds(ms));
+
+    // Expenses are reimbursed through this month's payslip, so they are part of
+    // the month's gross exactly like the travel lines are
+    const expA=monthExpenses.reduce((n,x)=>n+(x.amount||0),0);
+
     const earn=arr=>arr.reduce((n,s)=>n+shiftPay(s,jobs),0);
-    const gA=earn(past)+monthlyTotal, gF=earn(ms)+monthlyTotal;
+    const gA=earn(past)+monthlyTotal+monthTravelA+expA;
+    const gF=earn(ms)+monthlyTotal+monthTravelF+expA;
     const paid=earn(past.filter(s=>s.isPaid)), pend=earn(past.filter(s=>!s.isPaid));
-    const travelTotal=past.reduce((n,s)=>n+shiftTravel(s,jobs),0);
+    const travelTotal=past.reduce((n,s)=>n+shiftTravel(s,jobs),0)+monthTravelA;
     const kmTotal=past.reduce((n,s)=>n+shiftMileage(s,jobs),0);
     const kmDays=past.filter(s=>shiftMileage(s,jobs)>0).length;
     // Gross split into the work itself and everything paid alongside it, so the
     // headline figure can say which part is actually wages
     const basePay=past.reduce((n,s)=>n+s.earnings,0)+monthlyTotal;
     const bonusTotal=past.reduce((n,s)=>n+(s.bonus||0),0);
-    const addOns=travelTotal+kmTotal+bonusTotal;
+    const addOns=travelTotal+kmTotal+bonusTotal+expA;
 
-    // Pension base: only shifts/months where the job is pension-eligible on that date (3-month rule, or manual override)
+    // Pension is 6% of the wage itself. The payslip works out to exactly 6% of
+    // the base salary, with travel and reimbursements left out of the base.
     const pensionEarn=arr=>arr.reduce((n,s)=>{
       const j=findJob(jobs,s.jobId);
-      return pensionEligible(j,s.date) ? n+shiftPay(s,jobs) : n;
+      return pensionEligible(j,s.date) ? n+s.earnings : n;
     },0);
     const monthlyPensionTotal=Array.from(monthlyJobIds).reduce((n,jid)=>{
       const j=findJob(jobs,jid);
@@ -2196,7 +2237,7 @@ function DashboardPage({shifts,setShifts,jobs,settings,payslips,expenses,setTab}
     monthlyJobIds.forEach(jid=>{ const j=findJob(jobs,jid); if(j&&byJob[jid]) byJob[jid].earn+=j.rate; });
     const hrs=ms.reduce((n,s)=>n+(s.hours||0),0);
     return {ms,past,fut,gA,gF,paid,pend,travelTotal,kmTotal,kmDays,basePay,bonusTotal,addOns,nA,nF,byJob,hrs,monthlyTotal};
-  },[shifts,jobs,year,month,settings.creditPoints,today]);
+  },[shifts,jobs,year,month,settings.creditPoints,today,expenses]);
 
   const allPaid = d.past.length>0 && d.past.every(s=>s.isPaid);
 
@@ -3013,7 +3054,7 @@ function GoogleCalendarSection({jobs,shifts,setShifts,settings,setSettings}) {
 
 // ── PayslipsPage ─────────────────────────────────────────────
 // ── ExpensesPage (out-of-pocket work costs awaiting reimbursement) ──
-function ExpensesPage({expenses,setExpenses,jobs,setTab,settings}) {
+function ExpensesPage({expenses,setExpenses,jobs,shifts,setTab,settings}) {
   const activeJobs=(jobs||[]).filter(j=>!j.deleted);
   const [token,setToken]=useState(()=>_gToken);
   const [date,setDate]  =useState(todayS());
@@ -3089,9 +3130,20 @@ function ExpensesPage({expenses,setExpenses,jobs,setTab,settings}) {
   };
   const toggleReimbursed=id=>setExpenses(list=>list.map(x=>x.id===id?{...x,reimbursed:!x.reimbursed}:x));
 
+  // Mileage is money the employer owes for using the car, so it belongs in this
+  // list — but it is recorded on the shift, not here. These rows are derived and
+  // read-only: they are settled by the payslip, like everything else on this page.
+  const kmRows=useMemo(()=>(shifts||[])
+    .map(s=>{
+      const pay=shiftMileage(s,jobs); if(pay<=0) return null;
+      return {id:'km:'+s.id, date:s.date, amount:pay, jobId:s.jobId, fromShift:true,
+        reimbursed:!!s.isPaid, desc:'החזר ק"מ · '+shiftKm(s)+' ק"מ'};
+    }).filter(Boolean)
+  ,[shifts,jobs]);
+
   const grouped=useMemo(()=>{
     const by={};
-    (expenses||[]).forEach(x=>{ const k=x.date.slice(0,7); (by[k]=by[k]||[]).push(x); });
+    [...(expenses||[]),...kmRows].forEach(x=>{ const k=x.date.slice(0,7); (by[k]=by[k]||[]).push(x); });
     return Object.keys(by).sort().reverse().map(m=>{
       const [y,mo]=m.split('-').map(Number);
       const items=by[m].sort((a,b)=>a.date<b.date?1:-1);
@@ -3099,9 +3151,10 @@ function ExpensesPage({expenses,setExpenses,jobs,setTab,settings}) {
         total:items.reduce((n,x)=>n+(x.amount||0),0),
         pending:items.filter(x=>!x.reimbursed).reduce((n,x)=>n+(x.amount||0),0)};
     });
-  },[expenses]);
+  },[expenses,kmRows]);
 
-  const totalPending=(expenses||[]).filter(x=>!x.reimbursed).reduce((n,x)=>n+(x.amount||0),0);
+  const totalPending=[...(expenses||[]),...kmRows]
+    .filter(x=>!x.reimbursed).reduce((n,x)=>n+(x.amount||0),0);
 
   return html`<div class="space-y-4">
     <div class="hero hero-band">
@@ -3187,22 +3240,26 @@ function ExpensesPage({expenses,setExpenses,jobs,setTab,settings}) {
             <div class=${'flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center '+(x.reimbursed?'bg-emerald-50 text-emerald-600':'bg-amber-50 text-amber-600')}>
               <${Icon} name="wallet" size=${17}/>
             </div>
-            <div class="flex-1 min-w-0 cursor-pointer" onClick=${()=>startEdit(x)}>
+            <div class=${'flex-1 min-w-0 '+(x.fromShift?'':'cursor-pointer')} onClick=${()=>!x.fromShift&&startEdit(x)}>
               <div class="text-sm font-medium text-gray-800 truncate">${x.desc||'הוצאה'}</div>
               <div class="text-[11px] text-gray-400 truncate">
                 ${new Date(x.date+'T12:00:00').toLocaleDateString('he-IL',{day:'numeric',month:'long'})}
-                ${job?' · '+job.name:''}${x.reimbursed?' · הוחזר ✓':''}
+                ${job?' · '+job.name:''}${x.reimbursed?' · הוחזר ✓':''}${x.fromShift?' · מהמשמרת':''}
               </div>
             </div>
             <div class="text-sm font-bold text-gray-800 flex-shrink-0">${fmt(x.amount)}</div>
-            ${x.driveLink&&html`<a href=${x.driveLink} target="_blank" rel="noopener noreferrer"
-              class="flex-shrink-0 p-1.5 rounded hover:bg-blue-50 text-gray-400 hover:text-blue-500" title="צפה בחשבונית"><${Icon} name="external" size=${15}/></a>`}
-            <button onClick=${()=>startEdit(x)} title="ערוך"
-              class="flex-shrink-0 p-1.5 rounded text-gray-400 hover:bg-blue-50 hover:text-blue-500"><${Icon} name="pencil" size=${15}/></button>
-            <button onClick=${()=>toggleReimbursed(x.id)}
-              class=${'flex-shrink-0 p-1.5 rounded '+(x.reimbursed?'text-emerald-600 hover:bg-emerald-50':'text-gray-400 hover:bg-emerald-50 hover:text-emerald-600')}
-              title=${x.reimbursed?'בטל סימון החזר':'סמן שהוחזר'}><${Icon} name="check" size=${15}/></button>
-            <button onClick=${()=>del(x)} class="flex-shrink-0 p-1.5 rounded text-gray-400 hover:bg-red-50 hover:text-red-500"><${Icon} name="trash" size=${15}/></button>
+            ${x.fromShift
+              ? html`<span class="flex-shrink-0 p-1.5 text-gray-300" title="נרשם במשמרת — נערך בלשונית משמרות">
+                  <${Icon} name="car" size=${15}/></span>`
+              : html`
+                ${x.driveLink&&html`<a href=${x.driveLink} target="_blank" rel="noopener noreferrer"
+                  class="flex-shrink-0 p-1.5 rounded hover:bg-blue-50 text-gray-400 hover:text-blue-500" title="צפה בחשבונית"><${Icon} name="external" size=${15}/></a>`}
+                <button onClick=${()=>startEdit(x)} title="ערוך"
+                  class="flex-shrink-0 p-1.5 rounded text-gray-400 hover:bg-blue-50 hover:text-blue-500"><${Icon} name="pencil" size=${15}/></button>
+                <button onClick=${()=>toggleReimbursed(x.id)}
+                  class=${'flex-shrink-0 p-1.5 rounded '+(x.reimbursed?'text-emerald-600 hover:bg-emerald-50':'text-gray-400 hover:bg-emerald-50 hover:text-emerald-600')}
+                  title=${x.reimbursed?'בטל סימון החזר':'סמן שהוחזר'}><${Icon} name="check" size=${15}/></button>
+                <button onClick=${()=>del(x)} class="flex-shrink-0 p-1.5 rounded text-gray-400 hover:bg-red-50 hover:text-red-500"><${Icon} name="trash" size=${15}/></button>`}
           </div>`;
         })}
       </div>`)}
@@ -4004,7 +4061,7 @@ function App() {
         ${tab==='shifts'   &&html`<${ShiftsPage}    shifts=${shifts} setShifts=${setShifts} jobs=${jobs}/>`}
         ${tab==='jobs'     &&html`<${JobsPage}       jobs=${jobs}    setJobs=${setJobs} shifts=${shifts} setShifts=${setShifts}/>`}
         ${tab==='payslips' &&html`<${PayslipsPage}   payslips=${payslips} setPayslips=${setPayslips} shifts=${shifts} setShifts=${setShifts} jobs=${jobs} setTab=${setTab} settings=${settings} expenses=${expenses} setExpenses=${setExpenses}/>`}
-        ${tab==='expenses' &&html`<${ExpensesPage}   expenses=${expenses} setExpenses=${setExpenses} jobs=${jobs} setTab=${setTab} settings=${settings}/>`}
+        ${tab==='expenses' &&html`<${ExpensesPage}   expenses=${expenses} setExpenses=${setExpenses} jobs=${jobs} shifts=${shifts} setTab=${setTab} settings=${settings}/>`}
         ${tab==='settings' &&html`<${SettingsPage}   settings=${settings} setSettings=${setSettings} jobs=${jobs} shifts=${shifts} setJobs=${setJobs} setShifts=${setShifts} payslips=${payslips} setPayslips=${setPayslips} expenses=${expenses} setExpenses=${setExpenses}/>`}
       </div>
     </main>
