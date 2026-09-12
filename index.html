@@ -472,7 +472,7 @@ const html = htm.bind(h);
 //   major — a significant new capability (a new screen, a new thing the app can do)
 //   minor — everything else: fixes, tweaks, wording, small improvements
 // At minor 999 the next small change is major+1 and minor back to 1.
-const APP_VERSION = '2.6';
+const APP_VERSION = '3.1';
 
 const MONTHS = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
 const DAYS   = ['א׳','ב׳','ג׳','ד׳','ה׳','ו׳','ש׳'];
@@ -660,6 +660,27 @@ function shiftTravel(s, jobs) {
   if (s.travel!=null && s.travel!==0) return s.travel;
   const j=findJob(jobs,s.jobId);
   return (j&&j.travelPerDay)||0;
+}
+
+// ── Own-car mileage ──────────────────────────────────────────
+// Driving to the usual workplace pays nothing extra; a site further out pays
+// for the extra distance only. Every parameter — the rate, the distance that
+// counts as "usual", and whether a trip counts both ways — lives on the job, so
+// another job can be set up differently, and a single shift can override the
+// direction. Paid on top of the ordinary travel allowance, not instead of it.
+function shiftMileage(s, jobs) {
+  const j=findJob(jobs,s.jobId);
+  if (!j || !j.kmEnabled) return 0;
+  const km=+s.siteKm||0;
+  if (km<=0) return 0;                              // no site distance = usual workplace
+  const extra=km-(+j.kmBase||0);
+  if (extra<=0) return 0;                           // no further than usual
+  const rt = s.kmRoundTrip==null ? (j.kmRoundTrip!==false) : !!s.kmRoundTrip;
+  return Math.round(extra*(+j.kmRate||0)*(rt?2:1)*100)/100;
+}
+// What a shift is worth in total, so no caller has to remember the parts
+function shiftPay(s, jobs) {
+  return s.earnings + shiftTravel(s,jobs) + shiftMileage(s,jobs) + (s.bonus||0);
 }
 
 // ── Security helpers ─────────────────────────────────────────
@@ -966,7 +987,7 @@ function StatCard({label,value,sub,color,icon}) {
 }
 
 // ── JobForm ──────────────────────────────────────────────────
-function JobForm({initial, shifts, onSave, onClose}) {
+function JobForm({initial, shifts, jobs, onSave, onClose}) {
   const [name,  setName]  = useState((initial&&initial.name)||'');
   const [color, setColor] = useState((initial&&initial.color)||COLORS[0]);
   const [type,  setType]  = useState((initial&&initial.rateType)||'daily');
@@ -977,13 +998,18 @@ function JobForm({initial, shifts, onSave, onClose}) {
   const [jobStart,  setJobStart]  = useState((initial&&initial.startDate)||todayS());
   const [pensionMode,setPensionMode]=useState((initial&&initial.pensionMode)||'auto');
   const [travelDay, setTravelDay] = useState((initial&&initial.travelPerDay!=null)?String(initial.travelPerDay):'');
+  // Own-car mileage, per job — off unless this job actually pays it
+  const [kmEnabled, setKmEnabled] = useState(!!(initial&&initial.kmEnabled));
+  const [kmBase,    setKmBase]    = useState((initial&&initial.kmBase!=null)?String(initial.kmBase):'');
+  const [kmRate,    setKmRate]    = useState((initial&&initial.kmRate!=null)?String(initial.kmRate):'1');
+  const [kmRoundTrip,setKmRoundTrip]=useState(!(initial&&initial.kmRoundTrip===false));
 
   const pensionFrom = addMonths(jobStart||todayS(),3);
 
   // Miluim: daily tagmul auto-computed from the last 3 months' gross / 90, clamped to BL min/max
   const miluimRate = () => {
     const cutoff=addMonths(todayS(),-3);
-    const gross=(shifts||[]).filter(s=>s.date>=cutoff&&s.date<todayS()).reduce((n,s)=>n+s.earnings+(s.travel||0)+(s.bonus||0),0);
+    const gross=(shifts||[]).filter(s=>s.date>=cutoff&&s.date<todayS()).reduce((n,s)=>n+shiftPay(s,jobs||[]),0);
     return Math.round(Math.min(MILUIM_MAX_DAY,Math.max(MILUIM_MIN_DAY,gross/90)));
   };
 
@@ -995,7 +1021,9 @@ function JobForm({initial, shifts, onSave, onClose}) {
       return;
     }
     if (!rate||+rate<=0) return alert('יש להזין תעריף תקין');
-    onSave({name:name.trim(),color,rateType:type,rate:+rate,startTime,endTime,hoursMode,startDate:jobStart,pensionMode,travelPerDay:+travelDay||0});
+    if (kmEnabled && !(+kmRate>0)) return alert('יש להזין תשלום לק"מ');
+    onSave({name:name.trim(),color,rateType:type,rate:+rate,startTime,endTime,hoursMode,startDate:jobStart,pensionMode,travelPerDay:+travelDay||0,
+      kmEnabled,kmBase:+kmBase||0,kmRate:+kmRate||0,kmRoundTrip});
   };
   return html`<div class="space-y-4">
     <div>
@@ -1085,6 +1113,44 @@ function JobForm({initial, shifts, onSave, onClose}) {
         class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
       <p class="text-xs text-gray-400 mt-1">יתווסף אוטומטית לכל משמרת (ניתן לשנות בכל משמרת). למשל 16.6 ₪ ליום.</p>
     </div>`}
+    ${type!=='miluim'&&html`<div class="rounded-lg border border-gray-200 p-3 space-y-3">
+      <label class="flex items-center justify-between cursor-pointer select-none">
+        <span class="text-sm font-medium text-gray-700 flex items-center gap-1.5">
+          <${Icon} name="car" size=${15}/> תשלום ק"מ ברכב אישי
+        </span>
+        <input type="checkbox" checked=${kmEnabled} onChange=${e=>setKmEnabled(e.target.checked)} class="w-4 h-4 rounded"/>
+      </label>
+      ${!kmEnabled
+        ? html`<p class="text-xs text-gray-400">הפעל אם במשרה הזו משלמים לך על נסיעה ברכב שלך לאתר רחוק מהעבודה הרגילה.</p>`
+        : html`
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <span class="block text-xs text-gray-400 mb-1">מרחק לעבודה הרגילה (ק"מ)</span>
+              <input type="number" step="0.5" min="0" value=${kmBase} onInput=${e=>setKmBase(e.target.value)} placeholder="0"
+                class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
+            </div>
+            <div>
+              <span class="block text-xs text-gray-400 mb-1">תשלום לק"מ (₪)</span>
+              <input type="number" step="0.1" min="0" value=${kmRate} onInput=${e=>setKmRate(e.target.value)} placeholder="1"
+                class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
+            </div>
+          </div>
+          <div>
+            <span class="block text-xs text-gray-400 mb-1">ברירת מחדל לכיוון הנסיעה</span>
+            <div class="flex gap-2">
+              ${[[true,'הלוך וחזור'],[false,'כיוון אחד']].map(([v,l])=>html`
+                <button key=${String(v)} onClick=${()=>setKmRoundTrip(v)}
+                  class=${'flex-1 py-2 rounded-lg text-xs font-medium transition-colors '+(kmRoundTrip===v?'bg-blue-500 text-white':'bg-gray-100 text-gray-600 hover:bg-gray-200')}>
+                  ${l}</button>`)}
+            </div>
+            <p class="text-xs text-gray-400 mt-1">ניתן לשנות בכל משמרת בנפרד.</p>
+          </div>
+          <div class="text-[11px] text-gray-500 bg-slate-50 rounded-lg p-2 leading-5">
+            משולם רק על הק"מ <b>העודפים</b> מעל המרחק לעבודה הרגילה, ובנוסף להחזר הנסיעות היומי.
+            ${+kmBase>0&&+kmRate>0&&html`<br/>לדוגמה: אתר במרחק ${(+kmBase+15)} ק"מ →
+              ${fmt(15*(+kmRate)*(kmRoundTrip?2:1))}${kmRoundTrip?' (15 ק"מ עודפים × 2 כיוונים)':' (15 ק"מ עודפים)'}.`}
+          </div>`}
+    </div>`}
     <div class="flex gap-2 pt-1">
       <button onClick=${submit} class="flex-1 bg-blue-500 text-white py-2 rounded-lg text-sm font-semibold hover:bg-blue-600 transition-colors">שמור</button>
       <button onClick=${onClose} class="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg text-sm font-semibold hover:bg-gray-200 transition-colors">ביטול</button>
@@ -1105,6 +1171,9 @@ function ShiftForm({initial, jobs, shifts, onSave, onClose, onDelete}) {
   const [isPaid, setIsPaid] = useState(initial&&initial.isPaid!=null?initial.isPaid:false);
   const [arrived,setArrived]= useState(initial&&initial.arrived!=null?initial.arrived:false);
   const [notes,  setNotes]  = useState((initial&&initial.notes)||'');
+  const [siteKm, setSiteKm] = useState((initial&&initial.siteKm!=null&&initial.siteKm!==0)?String(initial.siteKm):'');
+  // null = follow the job's default direction for this shift
+  const [kmRT,   setKmRT]   = useState((initial&&initial.kmRoundTrip!=null)?!!initial.kmRoundTrip:null);
 
   const job        = findJob(jobs,jobId);
   const isMonthly  = job && job.rateType==='monthly';
@@ -1120,12 +1189,18 @@ function ShiftForm({initial, jobs, shifts, onSave, onClose, onDelete}) {
 
   const hours      = hoursBetween(startTime,endTime);
   const baseEarn   = isMonthly ? 0 : (job?((job.rateType==='daily'||job.rateType==='miluim')?job.rate:job.rate*hours):0);
-  const total      = baseEarn+(+travel||0)+(+bonus||0);
+  // Run the live preview through the same helper the money uses, so what the
+  // form shows can never disagree with what gets recorded
+  const draft      = {jobId,siteKm:+siteKm||0,kmRoundTrip:kmRT};
+  const mileage    = shiftMileage(draft,jobs);
+  const kmExtra    = Math.max(0,(+siteKm||0)-((job&&+job.kmBase)||0));
+  const total      = baseEarn+(+travel||0)+mileage+(+bonus||0);
 
   const submit = () => {
     if (!jobId) return alert('יש לבחור משרה');
     if (!date)  return alert('יש לבחור תאריך');
-    onSave({jobId,date,hours,startTime,endTime,travel:+travel||0,bonus:+bonus||0,isPaid,arrived,notes,earnings:baseEarn});
+    onSave({jobId,date,hours,startTime,endTime,travel:+travel||0,bonus:+bonus||0,isPaid,arrived,notes,earnings:baseEarn,
+      siteKm:+siteKm||0,kmRoundTrip:kmRT});
   };
 
   if (!jobs.some(j=>!j.deleted)) return html`<div class="text-center py-8 text-gray-400">
@@ -1179,6 +1254,33 @@ function ShiftForm({initial, jobs, shifts, onSave, onClose, onDelete}) {
           class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
       </div>
     </div>
+    ${job&&job.kmEnabled&&html`
+      <div class="rounded-lg border border-gray-200 p-3 space-y-2">
+        <label class="block text-sm font-medium text-gray-700 flex items-center gap-1.5">
+          <${Icon} name="car" size=${15}/> נסעתי ברכב שלי — מרחק לאתר (ק"מ)
+        </label>
+        <input type="number" step="0.5" min="0" value=${siteKm} onInput=${e=>setSiteKm(e.target.value)} placeholder="השאר ריק אם הגעת לעבודה הרגילה"
+          class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
+        ${+siteKm>0&&html`
+          <div>
+            <span class="block text-xs text-gray-400 mb-1">כיוון הנסיעה</span>
+            <div class="flex gap-2">
+              ${[[null,'לפי המשרה'],[true,'הלוך וחזור'],[false,'כיוון אחד']].map(([v,l])=>html`
+                <button key=${String(v)} onClick=${()=>setKmRT(v)}
+                  class=${'flex-1 py-1.5 rounded-lg text-[11px] font-medium transition-colors '+(kmRT===v?'bg-blue-500 text-white':'bg-gray-100 text-gray-600 hover:bg-gray-200')}>
+                  ${l}</button>`)}
+            </div>
+          </div>`}
+        <div class="text-[11px] text-gray-500">
+          ${!(+siteKm>0)
+            ? 'מרחק לעבודה הרגילה: '+((+job.kmBase)||0)+' ק"מ · בלי מרחק לא מתווסף תשלום ק"מ'
+            : mileage>0
+              ? kmExtra+' ק"מ מעל הרגיל × '+fmt(job.kmRate||0)
+                +((kmRT==null?job.kmRoundTrip!==false:kmRT)?' × 2 כיוונים':' (כיוון אחד)')
+              : 'האתר לא רחוק מהעבודה הרגילה — לא מתווסף תשלום ק"מ'}
+        </div>
+        ${mileage>0&&html`<div class="text-xs font-semibold text-emerald-600">תשלום ק"מ: +${fmt(mileage)}</div>`}
+      </div>`}
     ${job&&html`<div class="bg-slate-50 rounded-lg px-3 py-2 text-sm">
       <span class="text-gray-500">סה"כ משמרת: </span>
       <span class="font-bold text-emerald-600 text-base">${fmt(total)}</span>
@@ -1661,7 +1763,7 @@ function JobsPage({jobs,setJobs,shifts,setShifts}) {
       </div>`}
 
     ${modal&&html`<${Modal} title=${modal==='add'?'הוסף משרה':'ערוך משרה'} onClose=${()=>setModal(null)}>
-      <${JobForm} initial=${editing} shifts=${shifts} onSave=${save} onClose=${()=>setModal(null)}/>
+      <${JobForm} initial=${editing} shifts=${shifts} jobs=${jobs} onSave=${save} onClose=${()=>setModal(null)}/>
     <//>`}
     ${purgeJob&&html`<${Modal} title="מחיקה לצמיתות" onClose=${()=>setPurgeJob(null)}>
       <div class="space-y-3">
@@ -1718,7 +1820,7 @@ function DayModal({date,shifts,jobs,onEditShift,onDeleteShift,onAddShift,onToggl
     ${dayShifts.length===0
       ? html`<div class="text-sm text-gray-400 text-center py-4">אין משמרות ביום זה</div>`
       : dayShifts.map(s=>{
-          const job=findJob(jobs,s.jobId); const tot=s.earnings+(s.travel||0)+(s.bonus||0);
+          const job=findJob(jobs,s.jobId); const tot=shiftPay(s,jobs);
           return html`<div key=${s.id} class="border border-gray-100 rounded-lg p-2.5 space-y-2">
             <div class="flex items-center justify-between">
               <div class="flex items-center gap-2 flex-1 cursor-pointer" onClick=${()=>onEditShift(s)}>
@@ -1916,7 +2018,7 @@ function ShiftsPage({shifts,setShifts,jobs}) {
           </div>`:
         sorted.map(s=>{
           const job=findJob(jobs,s.jobId);
-          const tot=s.earnings+(s.travel||0)+(s.bonus||0);
+          const tot=shiftPay(s,jobs);
           const fut=s.date>today;
           return html`<div key=${s.id} class="bg-white rounded-xl border border-gray-100 p-3 shadow-sm fade">
             <div class="flex items-start justify-between gap-2">
@@ -2014,15 +2116,17 @@ function DashboardPage({shifts,setShifts,jobs,settings,payslips,expenses,setTab}
     ms.forEach(s=>{ const j=findJob(jobs,s.jobId); if(j&&j.rateType==='monthly') monthlyJobIds.add(s.jobId); });
     const monthlyTotal=Array.from(monthlyJobIds).reduce((n,jid)=>{const j=findJob(jobs,jid);return n+(j?j.rate:0);},0);
 
-    const earn=arr=>arr.reduce((n,s)=>n+s.earnings+shiftTravel(s,jobs)+(s.bonus||0),0);
+    const earn=arr=>arr.reduce((n,s)=>n+shiftPay(s,jobs),0);
     const gA=earn(past)+monthlyTotal, gF=earn(ms)+monthlyTotal;
     const paid=earn(past.filter(s=>s.isPaid)), pend=earn(past.filter(s=>!s.isPaid));
     const travelTotal=past.reduce((n,s)=>n+shiftTravel(s,jobs),0);
+    const kmTotal=past.reduce((n,s)=>n+shiftMileage(s,jobs),0);
+    const kmDays=past.filter(s=>shiftMileage(s,jobs)>0).length;
 
     // Pension base: only shifts/months where the job is pension-eligible on that date (3-month rule, or manual override)
     const pensionEarn=arr=>arr.reduce((n,s)=>{
       const j=findJob(jobs,s.jobId);
-      return pensionEligible(j,s.date) ? n+s.earnings+shiftTravel(s,jobs)+(s.bonus||0) : n;
+      return pensionEligible(j,s.date) ? n+shiftPay(s,jobs) : n;
     },0);
     const monthlyPensionTotal=Array.from(monthlyJobIds).reduce((n,jid)=>{
       const j=findJob(jobs,jid);
@@ -2034,12 +2138,12 @@ function DashboardPage({shifts,setShifts,jobs,settings,payslips,expenses,setTab}
     const byJob={};
     ms.forEach(s=>{
       const k=s.jobId; byJob[k]=byJob[k]||{shifts:0,earn:0};
-      byJob[k].shifts++; byJob[k].earn+=s.earnings+shiftTravel(s,jobs)+(s.bonus||0);
+      byJob[k].shifts++; byJob[k].earn+=shiftPay(s,jobs);
     });
     // Add monthly rate to each monthly job's byJob entry
     monthlyJobIds.forEach(jid=>{ const j=findJob(jobs,jid); if(j&&byJob[jid]) byJob[jid].earn+=j.rate; });
     const hrs=ms.reduce((n,s)=>n+(s.hours||0),0);
-    return {ms,past,fut,gA,gF,paid,pend,travelTotal,nA,nF,byJob,hrs,monthlyTotal};
+    return {ms,past,fut,gA,gF,paid,pend,travelTotal,kmTotal,kmDays,nA,nF,byJob,hrs,monthlyTotal};
   },[shifts,jobs,year,month,settings.creditPoints,today]);
 
   const allPaid = d.past.length>0 && d.past.every(s=>s.isPaid);
@@ -2286,14 +2390,22 @@ function DashboardPage({shifts,setShifts,jobs,settings,payslips,expenses,setTab}
             <span class="text-gray-700">סה"כ ניכויים</span><span class="text-red-600">${fmt(d.nA.total)}</span>
           </div>
         </div>
-        ${d.travelTotal>0&&html`
-          <div class="mt-3 pt-3 border-t border-gray-100">
+        ${(d.travelTotal>0||d.kmTotal>0)&&html`
+          <div class="mt-3 pt-3 border-t border-gray-100 space-y-1.5">
             <h3 class="text-sm font-semibold text-emerald-700 mb-2">תוספות</h3>
-            <div class="flex items-center gap-2">
+            ${d.travelTotal>0&&html`<div class="flex items-center gap-2">
               <div class="w-2.5 h-2.5 rounded-full flex-shrink-0" style=${{backgroundColor:'#10B981'}}/>
               <span class="text-xs text-gray-600 flex-1 flex items-center gap-1"><${Icon} name="car" size=${13}/> החזר נסיעות</span>
               <span class="text-xs font-semibold text-emerald-600">+${fmt(d.travelTotal)}</span>
-            </div>
+            </div>`}
+            ${d.kmTotal>0&&html`<div class="flex items-center gap-2">
+              <div class="w-2.5 h-2.5 rounded-full flex-shrink-0" style=${{backgroundColor:'#0EA5A4'}}/>
+              <span class="text-xs text-gray-600 flex-1 flex items-center gap-1">
+                <${Icon} name="car" size=${13}/> תשלום ק"מ ברכב אישי
+                <span class="text-gray-400">(${d.kmDays===1?'יום אחד':d.kmDays+' ימים'})</span>
+              </span>
+              <span class="text-xs font-semibold text-emerald-600">+${fmt(d.kmTotal)}</span>
+            </div>`}
           </div>`}
         ${d.nA.pension===0&&html`<div class="text-[11px] text-blue-500 bg-blue-50 rounded-lg p-2 mt-2">טרם חלה חובת ניכוי פנסיה החודש (בדרך כלל מתחיל אחרי 3 חודשי עבודה).</div>`}
       </div>`}
@@ -2370,10 +2482,10 @@ function CalcPage({shifts,jobs,settings,setSettings}) {
     return shifts.filter(s=>{const[y,m]=s.date.split('-').map(Number);return y===year&&m===month+1&&s.date<=t;});
   },[shifts,year,month]);
 
-  const autoG=useMemo(()=>monthShifts.reduce((n,s)=>n+s.earnings+shiftTravel(s,jobs)+(s.bonus||0),0),[monthShifts,jobs]);
+  const autoG=useMemo(()=>monthShifts.reduce((n,s)=>n+shiftPay(s,jobs),0),[monthShifts,jobs]);
   const autoPensionBase=useMemo(()=>monthShifts.reduce((n,s)=>{
     const j=findJob(jobs,s.jobId);
-    return pensionEligible(j,s.date) ? n+s.earnings+shiftTravel(s,jobs)+(s.bonus||0) : n;
+    return pensionEligible(j,s.date) ? n+shiftPay(s,jobs) : n;
   },0),[monthShifts,jobs]);
 
   const gross=manual?(+mg||0):autoG;
