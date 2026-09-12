@@ -514,7 +514,7 @@ const html = htm.bind(h);
 //   major — a significant new capability (a new screen, a new thing the app can do)
 //   minor — everything else: fixes, tweaks, wording, small improvements
 // At minor 999 the next small change is major+1 and minor back to 1.
-const APP_VERSION = '3.5';
+const APP_VERSION = '3.6';
 
 const MONTHS = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
 const DAYS   = ['א׳','ב׳','ג׳','ד׳','ה׳','ו׳','ש׳'];
@@ -614,25 +614,28 @@ function activeGcid(settings){
 
 // Shared sign-in so any screen can connect in place instead of sending the
 // user to Settings and back.
+// onDone is always called — with the token, or with null when the sign-in did
+// not happen — so a caller can wait on it and carry on or stop accordingly.
 function googleConnect(settings, onDone) {
+  const done = t => onDone && onDone(t||null);
   const g = window.google && window.google.accounts && window.google.accounts.oauth2;
-  if (!g) { alert('ספריית Google טרם נטענה. נסה שוב בעוד רגע.'); return; }
+  if (!g) { alert('ספריית Google טרם נטענה. נסה שוב בעוד רגע.'); done(null); return; }
   const cid = activeGcid(settings);
-  if (!cid) { alert('חסר Google Client ID בהגדרות.'); return; }
+  if (!cid) { alert('חסר Google Client ID בהגדרות.'); done(null); return; }
   try {
     g.initTokenClient({
       client_id: cid.trim(),
       scope: 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/calendar.events',
       callback: r => {
-        if (r.error) { alert('שגיאת התחברות: ' + r.error); return; }
+        if (r.error) { alert('שגיאת התחברות: ' + r.error); done(null); return; }
         saveGTok(r.access_token);
-        onDone && onDone(r.access_token);
+        done(r.access_token);
       }
       // Empty prompt reuses a grant that already exists and only asks when it
       // does not. 'consent' forced the full Google consent screen — and with it
       // the unverified-app warning — on every single sign-in.
     }).requestAccessToken({ prompt: '' });
-  } catch(e) { alert('שגיאת התחברות: ' + e.message); }
+  } catch(e) { alert('שגיאת התחברות: ' + e.message); done(null); }
 }
 
 function calcTax(g, pts) {
@@ -2253,19 +2256,13 @@ function DashboardPage({shifts,setShifts,jobs,settings,payslips,expenses,setTab}
     return list.sort((a,b)=>a.date<b.date?-1:1);
   };
 
+  // Just the heading — job and period. The detail travels in what is attached
+  // (the receipts, the opening card, the spreadsheet), not in the message body.
   const shareText=()=>{
     const list=shareList();
     const names=[...new Set(list.map(s=>s.jobId))].map(id=>{const j=findJob(jobs,id);return j?j.name:null;}).filter(Boolean);
     const nameStr=names.length?names.join(', ')+' ':'';
-    let txt='סיכום עבודה '+nameStr+'- '+sharePeriod()+'\nימי עבודה - '+list.length;
-    const ex=shareExpenses();
-    if(ex.length){
-      const dm=x=>{const p=x.date.split('-');return p[2]+'/'+p[1];};
-      txt+='\n\nהוצאות להחזר:';
-      ex.forEach(x=>{ txt+='\n'+dm(x)+' - '+(x.desc||'הוצאה')+' - '+Math.round(x.amount)+' ש"ח'; });
-      txt+='\nסה"כ להחזר - '+Math.round(ex.reduce((n,x)=>n+(x.amount||0),0))+' ש"ח';
-    }
-    return txt;
+    return 'סיכום עבודה '+nameStr+'- '+sharePeriod();
   };
   // Warn before sharing if some shifts in range were never confirmed as attended
   const confirmArrival=()=>{
@@ -2290,12 +2287,33 @@ function DashboardPage({shifts,setShifts,jobs,settings,payslips,expenses,setTab}
   },[attachRcpt,shareScope,shareJob]);
   const toggleRcpt=id=>setRcptPick(p=>{const n=new Set(p); n.has(id)?n.delete(id):n.add(id); return n;});
 
+  // Receipts live in Drive, so attaching them needs a Google session. Rather
+  // than sending the user to Settings and back, ask for it right here.
+  const [gTok,setGTok]=useState(()=>_gToken);
+  useEffect(()=>{
+    const iv=setInterval(()=>{ if(_gToken!==gTok) setGTok(_gToken); },1000);
+    return ()=>clearInterval(iv);
+  },[gTok]);
+  const ensureGoogle=()=>new Promise(res=>{
+    if(_gToken) return res(_gToken);
+    setRcptBusy('מתחבר ל-Google...');
+    googleConnect(settings,t=>{ setGTok(t); setRcptBusy(''); res(t); });
+  });
+  // Turning attachments on is itself the request to connect
+  const onAttachToggle=async on=>{
+    setAttachRcpt(on);
+    if(on && !_gToken) await ensureGoogle();
+  };
+
   const shareWhatsApp=async()=>{
     if(!confirmArrival()) return;
     const picked=receipts.filter(x=>rcptPick.has(x.id));
 
     if(attachRcpt && picked.length){
-      if(!_gToken){ alert('כדי לצרף חשבוניות יש להתחבר ל-Google.'); return; }
+      if(!_gToken && !await ensureGoogle()){
+        alert('לא הושלמה ההתחברות ל-Google, ולכן החשבוניות לא צורפו.');
+        return;
+      }
       setRcptBusy('מוריד חשבוניות...');
       try{
         const files=[];
@@ -2434,8 +2452,14 @@ function DashboardPage({shifts,setShifts,jobs,settings,payslips,expenses,setTab}
           <div class="rounded-lg border border-gray-100 p-2.5 space-y-2">
             <label class="flex items-center justify-between cursor-pointer select-none">
               <span class="text-xs text-gray-700">צרף גם צילומי חשבוניות (${receipts.length})</span>
-              <input type="checkbox" checked=${attachRcpt} onChange=${e=>setAttachRcpt(e.target.checked)} class="w-4 h-4 rounded"/>
+              <input type="checkbox" checked=${attachRcpt} onChange=${e=>onAttachToggle(e.target.checked)} class="w-4 h-4 rounded"/>
             </label>
+            ${attachRcpt&&!gTok&&!rcptBusy&&html`
+              <div class="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-2 py-1.5 flex items-center justify-between gap-2">
+                <span>צירוף חשבוניות דורש חשבון Google</span>
+                <button onClick=${ensureGoogle}
+                  class="flex-shrink-0 bg-blue-500 text-white px-2.5 py-1 rounded-lg font-semibold">התחבר</button>
+              </div>`}
             ${attachRcpt&&html`
               <div class="space-y-1 max-h-40 overflow-y-auto pr-1">
                 ${receipts.map(x=>html`
