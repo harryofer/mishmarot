@@ -514,7 +514,7 @@ const html = htm.bind(h);
 //   major — a significant new capability (a new screen, a new thing the app can do)
 //   minor — everything else: fixes, tweaks, wording, small improvements
 // At minor 999 the next small change is major+1 and minor back to 1.
-const APP_VERSION = '3.6';
+const APP_VERSION = '3.7';
 
 const MONTHS = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
 const DAYS   = ['א׳','ב׳','ג׳','ד׳','ה׳','ו׳','ש׳'];
@@ -733,10 +733,6 @@ const escapeHtml = s => String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 // Only allow http(s) URLs in hrefs (blocks javascript:/data: injected via tampered backups)
 function safeUrl(u){ try{ const x=new URL(u); return (x.protocol==='https:'||x.protocol==='http:')?u:null; }catch(e){ return null; } }
 
-// iOS WhatsApp takes either the files or the text from a share, never both,
-// so on iPhone the summary has to be part of the picture or it is lost.
-const IS_IOS=/iPhone|iPad|iPod/i.test(navigator.userAgent);
-
 // ── Share header card ────────────────────────────────────────
 // WhatsApp renders share({files,text}) as "first file, with the text as its
 // caption", and nothing web-side can move the text elsewhere (single text
@@ -744,12 +740,12 @@ const IS_IOS=/iPhone|iPad|iPod/i.test(navigator.userAgent);
 // So the first file is a purpose-made letterhead card: the thread opens with
 // the card + the summary, then the receipts follow in date order. `body`
 // paints the summary onto the card itself, for platforms that drop the text.
-async function makeShareCard(period, body){
+// The card is a letterhead, nothing more: the heading, the job and the period.
+// It used to print the whole summary into the picture on iOS; the detail belongs
+// in the message, not drawn into an image.
+async function makeShareCard(period, jobName){
   try{
-    const lines=(body||'').split('\n');
-    // HEAD is the letterhead block; the card only grows downward for the body,
-    // so the title and logo stay anchored to it instead of drifting into the text
-    const LH=52, W=1080, HEAD=400, H=HEAD+(body?lines.length*LH+70:0);
+    const W=1080, HEAD=400, H=HEAD;
     const cv=document.createElement('canvas'); cv.width=W; cv.height=H;
     const ctx=cv.getContext('2d');
     ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,W,H);
@@ -766,21 +762,16 @@ async function makeShareCard(period, body){
       tx=x-56;
     }catch(e){}
     ctx.direction='rtl'; ctx.textAlign='right';
+    // Three lines, centred as a block: heading, job, period
+    const hasJob=!!(jobName&&jobName.trim());
     ctx.fillStyle='#0B1017'; ctx.font='bold 84px sans-serif';
-    ctx.fillText('סיכום עבודה',tx,HEAD/2-14);
-    ctx.fillStyle='#3B82F6'; ctx.font='56px sans-serif';
-    ctx.fillText(period,tx,HEAD/2+74);
-    if(body){
-      ctx.strokeStyle='#E5E7EB'; ctx.lineWidth=2;
-      ctx.beginPath(); ctx.moveTo(70,HEAD-40); ctx.lineTo(W-70,HEAD-40); ctx.stroke();
-      let y=HEAD+18;
-      lines.forEach(t=>{
-        const head=/^סיכום עבודה|^הוצאות להחזר|^סה"כ/.test(t);
-        ctx.fillStyle=head?'#0B1017':'#374151';
-        ctx.font=(head?'bold ':'')+'40px sans-serif';
-        ctx.fillText(t,W-70,y); y+=LH;
-      });
+    ctx.fillText('סיכום עבודה',tx,hasJob?HEAD/2-52:HEAD/2-14);
+    if(hasJob){
+      ctx.fillStyle='#0B1017'; ctx.font='56px sans-serif';
+      ctx.fillText(jobName.trim(),tx,HEAD/2+26);
     }
+    ctx.fillStyle='#3B82F6'; ctx.font='56px sans-serif';
+    ctx.fillText(period,tx,hasJob?HEAD/2+104:HEAD/2+74);
     const blob=await new Promise(res=>cv.toBlob(res,'image/png'));
     return blob?new File([blob],'סיכום_'+period.replace(/\s/g,'_')+'.png',{type:'image/png'}):null;
   }catch(e){ return null; }
@@ -2256,13 +2247,20 @@ function DashboardPage({shifts,setShifts,jobs,settings,payslips,expenses,setTab}
     return list.sort((a,b)=>a.date<b.date?-1:1);
   };
 
-  // Just the heading — job and period. The detail travels in what is attached
-  // (the receipts, the opening card, the spreadsheet), not in the message body.
+  const shareJobNames=()=>[...new Set(shareList().map(s=>s.jobId))]
+    .map(id=>{const j=findJob(jobs,id);return j?j.name:null;}).filter(Boolean).join(', ');
+
   const shareText=()=>{
-    const list=shareList();
-    const names=[...new Set(list.map(s=>s.jobId))].map(id=>{const j=findJob(jobs,id);return j?j.name:null;}).filter(Boolean);
-    const nameStr=names.length?names.join(', ')+' ':'';
-    return 'סיכום עבודה '+nameStr+'- '+sharePeriod();
+    const nameStr=shareJobNames()?shareJobNames()+' ':'';
+    let txt='סיכום עבודה '+nameStr+'- '+sharePeriod()+'\nימי עבודה - '+shareList().length;
+    const ex=shareExpenses();
+    if(ex.length){
+      const dm=x=>{const p=x.date.split('-');return p[2]+'/'+p[1];};
+      txt+='\n\nהוצאות להחזר:';
+      ex.forEach(x=>{ txt+='\n'+dm(x)+' - '+(x.desc||'הוצאה')+' - '+Math.round(x.amount)+' ש"ח'; });
+      txt+='\nסה"כ להחזר - '+Math.round(ex.reduce((n,x)=>n+(x.amount||0),0))+' ש"ח';
+    }
+    return txt;
   };
   // Warn before sharing if some shifts in range were never confirmed as attended
   const confirmArrival=()=>{
@@ -2326,7 +2324,7 @@ function DashboardPage({shifts,setShifts,jobs,settings,payslips,expenses,setTab}
         }
         setRcptBusy('מכין כרטיס פתיחה...');
         // iPhone drops the shared text next to files, so the card carries it there
-        const card=await makeShareCard(sharePeriod(), IS_IOS?shareText():'');
+        const card=await makeShareCard(sharePeriod(), shareJobNames());
         const out=card?[card,...files]:files;
         setRcptBusy('');
         if(navigator.canShare&&navigator.canShare({files:out})){
