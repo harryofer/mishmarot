@@ -514,7 +514,7 @@ const html = htm.bind(h);
 //   major — a significant new capability (a new screen, a new thing the app can do)
 //   minor — everything else: fixes, tweaks, wording, small improvements
 // At minor 999 the next small change is major+1 and minor back to 1.
-const APP_VERSION = '4.1';
+const APP_VERSION = '4.2';
 
 const MONTHS = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
 const DAYS   = ['א׳','ב׳','ג׳','ד׳','ה׳','ו׳','ש׳'];
@@ -2279,10 +2279,18 @@ function DashboardPage({shifts,setShifts,jobs,settings,payslips,expenses,setTab}
     const [y,m]=shareScope.split('-').map(Number);
     return MONTHS[m-1]+' '+y;
   };
-  // Expenses matching the same period/job selection. Already-reimbursed ones are
-  // left out so the request never asks for the same money twice. Images are never shared.
+  // What is still owed for the chosen period/job: out-of-pocket expenses and the
+  // car kilometres, which are owed the same way and so are claimed together.
+  // Already-settled items are left out so the request never asks twice.
+  // Mileage carries no receipt, so it never reaches the attachment list.
   const shareExpenses=()=>{
-    let list=(expenses||[]).filter(x=>!x.reimbursed);
+    const km=(shifts||[]).map(s=>{
+      const pay=shiftMileage(s,jobs);
+      if(pay<=0||s.isPaid) return null;
+      return {id:'km:'+s.id,date:s.date,amount:pay,jobId:s.jobId,fromShift:true,
+        desc:'החזר ק"מ · '+shiftKm(s)+' ק"מ'};
+    }).filter(Boolean);
+    let list=[...(expenses||[]).filter(x=>!x.reimbursed),...km];
     if(shareScope!=='all') list=list.filter(x=>x.date.slice(0,7)===shareScope);
     if(shareJob!=='all')   list=list.filter(x=>x.jobId===shareJob);
     return list.sort((a,b)=>a.date<b.date?-1:1);
