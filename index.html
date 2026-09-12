@@ -514,7 +514,7 @@ const html = htm.bind(h);
 //   major — a significant new capability (a new screen, a new thing the app can do)
 //   minor — everything else: fixes, tweaks, wording, small improvements
 // At minor 999 the next small change is major+1 and minor back to 1.
-const APP_VERSION = '4.4';
+const APP_VERSION = '4.5';
 
 const MONTHS = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
 const DAYS   = ['א׳','ב׳','ג׳','ד׳','ה׳','ו׳','ש׳'];
@@ -2270,7 +2270,18 @@ function DashboardPage({shifts,setShifts,jobs,settings,payslips,expenses,setTab}
   };
   const kmPreview=kmShift?shiftMileage({jobId:kmShift.jobId,km:+kmValue||0,kmRoundTrip:kmMode},jobs):0;
 
-  const [shareScope,setShareScope]=useState(()=>{const n=new Date();return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');}); // 'all' | 'YYYY-MM'
+  // 'all' | 'YYYY-MM'. A month is claimed once it is over, so the default is last
+  // month for as long as it is still unpaid; once it is settled there is nothing
+  // left to ask for and the current month takes over.
+  const [shareScope,setShareScope]=useState(()=>{
+    const ym=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+    const cur=ym(new Date());
+    const p=new Date(); p.setDate(1); p.setMonth(p.getMonth()-1);
+    const prev=ym(p);
+    const prevShifts=shifts.filter(s=>s.date.slice(0,7)===prev);
+    const prevSettled=prevShifts.length>0&&prevShifts.every(s=>s.isPaid);
+    return (prevShifts.length>0&&!prevSettled)?prev:cur;
+  });
   const [shareJob,  setShareJob]  =useState('all');   // 'all' | jobId
   const shareMonths=useMemo(()=>{
     const set=new Set(shifts.map(s=>s.date.slice(0,7)));
@@ -3284,16 +3295,18 @@ function ExpensesPage({expenses,setExpenses,jobs,shifts,setTab,settings}) {
 
 // Shared by the upload form and by editing an already-filed payslip, so both
 // screens ask the same question in the same words
-function ExpenseSettleList({items,unpaid,onToggle}) {
+function ExpenseSettleList({items,unpaid,onToggle,gapOnly}) {
   const paid=items.filter(x=>!unpaid.has(x.id));
   const paidSum=paid.reduce((n,x)=>n+(x.amount||0),0);
   return html`
     <div class="rounded-xl border border-amber-100 bg-amber-50/60 p-3 space-y-2">
       <div class="text-xs font-semibold text-amber-800 flex items-center gap-1.5">
-        <${Icon} name="wallet" size=${14}/> החזר הוצאות לחודש זה
+        <${Icon} name="wallet" size=${14}/> ${gapOnly?'החזרים שלא שולמו בתלוש זה':'החזר הוצאות לחודש זה'}
       </div>
       <div class="text-[11px] text-amber-700 leading-4">
-        התלוש מסמן את כל ההוצאות של החודש כהוחזרו. סמן כאן רק מה ש<b>לא</b> קיבלת בחזרה.
+        ${gapOnly
+          ? html`בטל סימון כדי לסמן שההחזר שולם בסופו של דבר.`
+          : html`התלוש מסמן את כל ההוצאות של החודש כהוחזרו. סמן כאן רק מה ש<b>לא</b> קיבלת בחזרה.`}
       </div>
       <div class="space-y-1 max-h-44 overflow-y-auto">
         ${items.map(x=>html`
@@ -3306,9 +3319,13 @@ function ExpenseSettleList({items,unpaid,onToggle}) {
           </label>`)}
       </div>
       <div class="text-[11px] text-amber-800 border-t border-amber-100 pt-1.5">
-        ${unpaid.size===0
-          ? 'הכל יסומן כהוחזר — סה"כ '+fmt(paidSum)
-          : paid.length+' מתוך '+items.length+' יסומנו כהוחזרו ('+fmt(paidSum)+') · '+unpaid.size+' יישארו ממתינות'}
+        ${gapOnly
+          ? (unpaid.size===0
+              ? 'סומן ששולם הכל — הפער ייסגר'
+              : unpaid.size+' עדיין ממתינים · '+fmt(items.filter(x=>unpaid.has(x.id)).reduce((n,x)=>n+(x.amount||0),0)))
+          : (unpaid.size===0
+              ? 'הכל יסומן כהוחזר — סה"כ '+fmt(paidSum)
+              : paid.length+' מתוך '+items.length+' יסומנו כהוחזרו ('+fmt(paidSum)+') · '+unpaid.size+' יישארו ממתינות')}
       </div>
     </div>`;
 }
@@ -3393,9 +3410,15 @@ function PayslipsPage({payslips,setPayslips,shifts,setShifts,jobs,setTab,setting
     .filter(x=>x.date.slice(0,7)===editSlip.month&&(!editSlip.jobId||!x.jobId||x.jobId===editSlip.jobId))
     .sort((a,b)=>a.date<b.date?-1:1)
   ,[expenses,editSlip]);
+  // The gap as it was filed. Kept apart from the live ticks so unticking the
+  // last one does not make the row it belongs to disappear mid-edit.
+  const [editFiledGap,setEditFiledGap]=useState(()=>new Set());
+  const [editShowAll,setEditShowAll]=useState(false);
   const startEdit=p=>{
     setEditId(p.id); setEditNotes(p.notes||'');
     setEditUnpaid(new Set(p.unpaidExpenseIds||[]));
+    setEditFiledGap(new Set(p.unpaidExpenseIds||[]));
+    setEditShowAll(false);
   };
   // Filing a second payslip over a month that already has one is usually a slip
   // of the month picker, so say so before the upload rather than after
@@ -3629,9 +3652,22 @@ function PayslipsPage({payslips,setPayslips,shifts,setShifts,jobs,setTab,setting
               const [y,mo]=editSlip.month.split('-').map(Number);
               return (j?j.name+' · ':'')+MONTHS[mo-1]+' '+y;})()}
           </div>
-          ${editExpenses.length>0
-            ? html`<${ExpenseSettleList} items=${editExpenses} unpaid=${editUnpaid} onToggle=${toggleEditUnpaid}/>`
-            : html`<div class="text-xs text-gray-400 bg-gray-50 rounded-lg px-3 py-2">אין הוצאות רשומות לחודש זה.</div>`}
+          ${(()=>{
+            // Once filed, the only thing worth revisiting is the gap that was
+            // recorded. A payslip filed as fully paid says so in one line
+            // instead of listing the whole month again.
+            if(editExpenses.length===0)
+              return html`<div class="text-xs text-gray-400 bg-gray-50 rounded-lg px-3 py-2">אין הוצאות רשומות לחודש זה.</div>`;
+            if(editShowAll)
+              return html`<${ExpenseSettleList} items=${editExpenses} unpaid=${editUnpaid} onToggle=${toggleEditUnpaid}/>`;
+            const gap=editExpenses.filter(x=>editFiledGap.has(x.id));
+            if(gap.length===0)
+              return html`<div class="text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2 flex items-center justify-between gap-2">
+                <span>בתלוש זה סומן שכל ההחזרים שולמו.</span>
+                <button onClick=${()=>setEditShowAll(true)} class="flex-shrink-0 text-blue-600 hover:underline">יש פער?</button>
+              </div>`;
+            return html`<${ExpenseSettleList} items=${gap} unpaid=${editUnpaid} onToggle=${toggleEditUnpaid} gapOnly=${true}/>`;
+          })()}
           <div>
             <label class="block text-xs font-medium text-gray-500 mb-1">הערות</label>
             <textarea value=${editNotes} onInput=${e=>setEditNotes(e.target.value)} rows="3"
