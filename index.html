@@ -514,17 +514,52 @@ const html = htm.bind(h);
 //   major — a significant new capability (a new screen, a new thing the app can do)
 //   minor — everything else: fixes, tweaks, wording, small improvements
 // At minor 999 the next small change is major+1 and minor back to 1.
-const APP_VERSION = '4.5';
+const APP_VERSION = '4.6';
 
 const MONTHS = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
 const DAYS   = ['א׳','ב׳','ג׳','ד׳','ה׳','ו׳','ש׳'];
-// Soft but saturated — every hue is distinct at swatch size, so no two jobs
-// read as the same colour. Greys and near-duplicate blues were dropped.
-const COLORS = [
-  '#4A9EE0','#2FA8A0','#F2B441','#9B8CEA','#E0568C','#46C08A','#F0803C','#3FB6CC',
-  '#7FC4F0','#6FD6C4','#FFD37A','#C3B5F5','#F58BB0','#86D9A8','#FFAE7A','#5FD0E8',
-  '#7D9BE8','#B565C9','#C9789F','#D69A5A','#7FA85C','#C4685E','#43A86B','#E8654F','#2C7A5B'
+// Google Calendar's own 24 colours, in the order its picker lists them, so a
+// job looks the same here and on the calendar. `gcal` is the classic event
+// colorId (1-11) — the only ids the API has always accepted. The 13 newer
+// hues point at the nearest classic one, used only when the account's calendar
+// does not offer the exact colour (see gcalColorId in GoogleCalendarSection).
+const GCAL_COLORS = [
+  {hex:'#AD1457',name:'צנונית',      gcal:'11'},
+  {hex:'#D81B60',name:'פריחת דובדבן',gcal:'4'},
+  {hex:'#E67C73',name:'פלמינגו',     gcal:'4'},
+  {hex:'#D50000',name:'עגבנייה',     gcal:'11'},
+  {hex:'#F4511E',name:'מנדרינה',     gcal:'6'},
+  {hex:'#EF6C00',name:'דלעת',        gcal:'6'},
+  {hex:'#F09300',name:'מנגו',        gcal:'6'},
+  {hex:'#F6BF26',name:'בננה',        gcal:'5'},
+  {hex:'#E4C441',name:'אתרוג',       gcal:'5'},
+  {hex:'#C0CA33',name:'אבוקדו',      gcal:'5'},
+  {hex:'#7CB342',name:'פיסטוק',      gcal:'10'},
+  {hex:'#0B8043',name:'ריחן',        gcal:'10'},
+  {hex:'#33B679',name:'דשא',         gcal:'2'},
+  {hex:'#009688',name:'אקליפטוס',    gcal:'2'},
+  {hex:'#039BE5',name:'טווס',        gcal:'7'},
+  {hex:'#4285F4',name:'קובאלט',      gcal:'9'},
+  {hex:'#7986CB',name:'לבנדר',       gcal:'1'},
+  {hex:'#3F51B5',name:'אוכמנית',     gcal:'9'},
+  {hex:'#B39DDB',name:'וויסטריה',    gcal:'1'},
+  {hex:'#9E69AF',name:'אחלמה',       gcal:'3'},
+  {hex:'#8E24AA',name:'סגול',        gcal:'3'},
+  {hex:'#795548',name:'קקאו',        gcal:'8'},
+  {hex:'#616161',name:'גרפיט',       gcal:'8'},
+  {hex:'#A79B8E',name:'ליבנה',       gcal:'8'}
 ];
+const COLORS = GCAL_COLORS.map(c=>c.hex);
+const gcalColor = hex => GCAL_COLORS.find(c=>c.hex.toLowerCase()===String(hex||'').toLowerCase());
+// Jobs saved before the palette matched Google keep their old hex; this moves
+// any such colour to the closest of the 24 so the picker and calendar agree.
+function nearestColor(hex){
+  const rgb=h=>{const n=parseInt(String(h).replace('#',''),16);return [(n>>16)&255,(n>>8)&255,n&255];};
+  const [r,g,b]=rgb(hex);
+  let best=COLORS[0], bd=Infinity;
+  for(const c of COLORS){ const [r2,g2,b2]=rgb(c); const d=(r-r2)**2+(g-g2)**2+(b-b2)**2; if(d<bd){bd=d;best=c;} }
+  return best;
+}
 
 // ── Helpers ──────────────────────────────────────────────────
 const genId   = () => Date.now().toString(36) + Math.random().toString(36).slice(2,5);
@@ -603,7 +638,7 @@ async function deleteDriveFile(id){
 const BRACKETS  = [{l:7380,r:.10},{l:10620,r:.14},{l:17040,r:.20},{l:22440,r:.31},{l:46640,r:.35},{l:60130,r:.47},{l:1e9,r:.50}];
 const CVAL=242, NI_FL=6970, NI_CL=49030;
 // Miluim (reserve duty) daily compensation bounds — Bituach Leumi estimates, editable by the user
-const MILUIM_MIN_DAY=310, MILUIM_MAX_DAY=1650, MILUIM_COLOR='#7FA85C';
+const MILUIM_MIN_DAY=310, MILUIM_MAX_DAY=1650, MILUIM_COLOR='#7CB342'; // Google's "פיסטוק"
 
 // Google OAuth Client ID (public identifier, baked in; stored overrides are ignored unless valid)
 const DEFAULT_GCID='365339624558-7t7arbt13od0i1frr0i3v0ernhsq6mhv.apps.googleusercontent.com';
@@ -852,12 +887,13 @@ function Modal({title, onClose, children}) {
 
 // ── ColorPicker ──────────────────────────────────────────────
 function ColorPicker({value, onChange}) {
-  return html`<div class="flex flex-wrap gap-2">
-    ${COLORS.map(c=>html`
-      <button key=${c} onClick=${()=>onChange(c)} title=${c}
-        class=${'swatch'+(value===c?' on':'')}
-        style=${{backgroundColor:c}}/>`)}
-  </div>`;
+  return html`<div><div class="flex flex-wrap gap-2">
+    ${GCAL_COLORS.map(c=>html`
+      <button key=${c.hex} onClick=${()=>onChange(c.hex)} title=${c.name} aria-label=${c.name}
+        class=${'swatch'+(value===c.hex?' on':'')}
+        style=${{backgroundColor:c.hex}}/>`)}
+  </div>
+  ${gcalColor(value)&&html`<div class="text-xs text-gray-500 mt-1.5">${gcalColor(value).name} · כך המשמרות יופיעו ביומן Google</div>`}</div>`;
 }
 
 // ── MonthNav ─────────────────────────────────────────────────
@@ -1108,7 +1144,7 @@ function JobForm({initial, shifts, jobs, onSave, onClose}) {
       ${type==='miluim'
         ? html`<div class="flex items-center gap-2 text-sm text-gray-500">
             <span class="w-6 h-6 rounded-full" style=${{backgroundColor:MILUIM_COLOR}}/>
-            ירוק זית — צבע קבוע למשרת מילואים
+            פיסטוק — צבע קבוע למשרת מילואים
           </div>`
         : html`<${ColorPicker} value=${color} onChange=${setColor}/>`}
     </div>
@@ -2929,7 +2965,27 @@ function GoogleCalendarSection({jobs,shifts,setShifts,settings,setSettings}) {
     return o;
   };
 
-  const syncOne = async (s) => {
+  // The account's own event palette, read once per sync. Google added 13 event
+  // colours in 2026 without documenting their ids, so a job colour is matched
+  // by hex against what this calendar actually offers; failing that (or if the
+  // read is refused) the classic id from GCAL_COLORS is used, which always works.
+  const loadEventPalette = async () => {
+    const byHex={};
+    try{
+      const r=await fetch('https://www.googleapis.com/calendar/v3/colors',{headers:{Authorization:'Bearer '+_gToken}});
+      if(r.ok){ const j=await r.json(); const ev=(j&&j.event)||{};
+        for(const id in ev){ const bg=ev[id]&&ev[id].background; if(bg) byHex[bg.toLowerCase()]=id; } }
+    }catch(e){}
+    return byHex;
+  };
+  const gcalColorId = (job, byHex) => {
+    const hex=((job&&job.color)||'').toLowerCase();
+    if(hex&&byHex&&byHex[hex]) return byHex[hex];
+    const c=gcalColor(job&&job.color)||gcalColor(job&&nearestColor(job.color||COLORS[0]));
+    return (c&&c.gcal)||'11';
+  };
+
+  const syncOne = async (s, byHex) => {
     const job=findJob(jobs,s.jobId);
     const isMil=job&&job.rateType==='miluim';
     const title=isMil?'מילואים':'עבודה'+(job?' – '+job.name:'');
@@ -2939,7 +2995,7 @@ function GoogleCalendarSection({jobs,shifts,setShifts,settings,setSettings}) {
     if(et<=st){ const nd=new Date(s.date+'T12:00:00'); nd.setDate(nd.getDate()+1); endDate=nd.toISOString().slice(0,10); }
     const ov=buildOverrides();
     const body={
-      summary:title, colorId:isMil?'10':'11',
+      summary:title, colorId:gcalColorId(job,byHex),
       start:{dateTime:s.date+'T'+st+':00', timeZone:'Asia/Jerusalem'},
       end:{dateTime:endDate+'T'+et+':00', timeZone:'Asia/Jerusalem'},
       reminders:{useDefault:false, overrides:ov}
@@ -2984,7 +3040,8 @@ function GoogleCalendarSection({jobs,shifts,setShifts,settings,setSettings}) {
       await processGcalDelQueue();
       // 1) add / update events for existing shifts in range
       const idMap={};
-      for(const s of list){ idMap[s.id]=await syncOne(s); }
+      const byHex=await loadEventPalette();
+      for(const s of list){ idMap[s.id]=await syncOne(s,byHex); }
       const updated=shifts.map(x=>idMap[x.id]?{...x,gcalId:idMap[x.id]}:x);
       setShifts(()=>updated);
       // 2) remove orphaned "עבודה" events inside the chosen range (shifts that were deleted)
@@ -3010,7 +3067,7 @@ function GoogleCalendarSection({jobs,shifts,setShifts,settings,setSettings}) {
   };
 
   return html`<div class="space-y-3">
-    <p class="text-xs text-gray-500">סנכרון דו-כיווני בטווח שתבחר: משמרות חדשות יתווספו/יעודכנו ביומן Google כאירועים <span class="text-red-500 font-medium">אדומים</span> (בשעות המשרה), ומשמרות שמחקת יוסרו מהיומן.</p>
+    <p class="text-xs text-gray-500">סנכרון דו-כיווני בטווח שתבחר: משמרות חדשות יתווספו/יעודכנו ביומן Google כאירועים <span class="font-medium">בצבע של המשרה</span> (בשעות המשרה), ומשמרות שמחקת יוסרו מהיומן.</p>
     <div class="bg-slate-50 rounded-lg p-3 space-y-2">
       <div class="text-sm font-medium text-gray-700">🔔 התראות יומן (עובדות גם כשהאפליקציה סגורה)</div>
       <label class="flex items-center justify-between cursor-pointer select-none">
@@ -4037,6 +4094,13 @@ function App() {
   },[]);
 
   useReminders(shifts,settings,setShifts);
+
+  // Move jobs saved with an old palette colour (or restored from an old backup)
+  // onto the nearest of Google Calendar's 24, once, so every job has a calendar colour.
+  useEffect(()=>{
+    const stale=j=>j&&j.color&&!gcalColor(j.color);
+    if(jobs.some(stale)) setJobs(js=>js.map(j=>stale(j)?{...j,color:nearestColor(j.color)}:j));
+  },[jobs]);
 
   // Auto Google sign-in on load: (1) reuse saved token, (2) silent attempt,
   // (3) fallback on first user tap (browsers allow the OAuth popup only on a user gesture)
